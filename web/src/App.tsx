@@ -20,6 +20,7 @@ export function App() {
   const [comparison, setComparison] = useState<Comparison | null>(null);
   const [lenses, setLenses] = useState<LensReport | null>(null);
   const [story, setStory] = useState<Story | null>(null);
+  const [storyMissing, setStoryMissing] = useState(false);
   const [screen, setScreen] = useState<Screen>(() => (new URLSearchParams(location.search).get("view") === "explore" ? "explore" : "tour"));
   const [stop, setStop] = useState(0);
   const [layout, setLayout] = useState<MapLayout | null>(null);
@@ -46,7 +47,9 @@ export function App() {
         setHead(s.head);
         setComparison(s.comparison);
         setLenses(s.lenses);
-        setStory(s.story);
+        setStory(s.story ?? null);
+        // A server started before the tour existed sends no story.
+        setStoryMissing(!s.story);
         setStatus(s.status);
         setAreasPath(s.areasPath);
       })
@@ -64,7 +67,6 @@ export function App() {
       setStatus("Ready");
     });
     api.lenses(head).then((l) => !stale && setLenses(l));
-    api.story(head).then((st) => !stale && setStory(st));
     return () => {
       stale = true;
     };
@@ -205,6 +207,20 @@ export function App() {
     return () => window.removeEventListener("keydown", onKey);
   }, [mode, changeMode, timeline, head, pickHead, screen, story, stop]);
 
+  // Keep the tour on the commit being shown, however the comparison arrived (scrubbing or a live commit).
+  const shown = comparison?.head.sha;
+  useEffect(() => {
+    if (!shown || story?.head === shown || storyMissing) return;
+    let stale = false;
+    api
+      .story(shown)
+      .then((st) => !stale && setStory(st))
+      .catch(() => !stale && setStoryMissing(true));
+    return () => {
+      stale = true;
+    };
+  }, [shown, story?.head, storyMissing]);
+
   // A new story starts the tour from its first stop.
   useEffect(() => setStop(0), [story?.head, story?.source]);
 
@@ -252,7 +268,8 @@ export function App() {
           {comparison ? (
             <Tour
               comparison={comparison}
-              story={story}
+              story={story?.head === comparison.head.sha ? story : null}
+              storyMissing={storyMissing}
               lenses={lenses}
               stop={stop}
               onStop={setStop}

@@ -13,6 +13,7 @@ const TONE_WORD = { good: "Better", bad: "Worse", ask: "A question", flat: "Cont
 export function Tour({
   comparison: c,
   story,
+  storyMissing,
   lenses,
   stop,
   onStop,
@@ -21,6 +22,7 @@ export function Tour({
 }: {
   comparison: Comparison;
   story: Story | null;
+  storyMissing: boolean;
   lenses: LensReport | null;
   stop: number;
   onStop(i: number): void;
@@ -62,7 +64,7 @@ export function Tour({
             </>
           ) : story?.source === "claude" ? (
             "Told by Claude Code from the measurements."
-          ) : (
+          ) : !story ? null : (
             <>
               Built from the measurements alone.{" "}
               <button className="linkish" onClick={onTell}>
@@ -100,6 +102,24 @@ export function Tour({
               </button>
             </footer>
           </article>
+        ) : !story ? (
+          <div className="stop empty">
+            {storyMissing ? (
+              <>
+                <h2 className="stop-heading">Restart Refract to see the tour</h2>
+                <p className="stop-explain">
+                  This page is newer than the Refract server running it. Stop <code>refract</code> with Ctrl-C and start it again; the Explore view works meanwhile.
+                </p>
+              </>
+            ) : (
+              <>
+                <h2 className="stop-heading">Preparing the tour</h2>
+                <p className="stop-explain">
+                  <span className="spinner small" /> Measuring this commit.
+                </p>
+              </>
+            )}
+          </div>
         ) : (
           <div className="stop empty">
             <h2 className="stop-heading">Nothing structural to show</h2>
