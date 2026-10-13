@@ -4,6 +4,7 @@ import type { Comparison, LensId, LensQuestion, LensReport, Story } from "../../
 import { StopDiagram, shortName } from "./StopDiagram";
 import { MethodCode, resolveTarget } from "./MethodCode";
 import { LENS_INFO } from "../LensRail";
+import { ProductPage, hasProduct, productCounts } from "./Product";
 
 interface Note {
   lens: LensId;
@@ -43,10 +44,14 @@ export function Tour({
   // Each key change carries the one sharpest question from the books; the books' overall take,
   // where they disagree and every other question live on one page after the key changes.
   const picks = useMemo(() => pickQuestions(lenses, stops), [lenses, stops]);
-  const pages = stops.length + (stops.length ? 1 : 0);
-  const i = Math.min(stop, Math.max(0, pages - 1));
-  const current = stops[i];
-  const onBooks = !current && stops.length > 0 && i === stops.length;
+  // Pages: what changed in the product (when anything did), the key changes, then the books.
+  const P = hasProduct(c.product) ? 1 : 0;
+  const pages = P + stops.length + (stops.length ? 1 : 0);
+  const page = Math.min(stop, Math.max(0, pages - 1));
+  const onProduct = P === 1 && page === 0;
+  const i = page - P;
+  const current = i >= 0 ? stops[i] : undefined;
+  const onBooks = !onProduct && !current && stops.length > 0 && i === stops.length;
   const openClass = (name: string, t: PanelTab = "shape") => {
     setTab(t);
     setModal(name);
@@ -65,19 +70,34 @@ export function Tour({
   }, [modal]);
   useEffect(() => {
     document.querySelector(".tour-stage")?.scrollTo({ top: 0, behavior: "smooth" });
-  }, [i]);
+  }, [page]);
 
   return (
     <div className="tour">
       <aside className="tour-nav">
         <div className="kicker">What this change does</div>
         <h1 className="tour-summary">{story?.summary ?? c.verdict.summary}</h1>
+        {P === 1 && (
+          <ol className="tour-stops product-link">
+            <li>
+              <button aria-current={onProduct} onClick={() => onStop(0)}>
+                <span className="stop-num flat">
+                  <TableIcon />
+                </span>
+                <span className="stop-title">
+                  What changed in the product
+                  <span className="stop-sub">{productCounts(c.product!).slice(0, 3).map((x) => x.text).join(" · ")}</span>
+                </span>
+              </button>
+            </li>
+          </ol>
+        )}
+        {stops.length > 0 && <div className="kicker">How the code changed</div>}
         {stops.length > 0 && <Verdict stops={stops} />}
-        {stops.length > 0 && <div className="kicker">Key changes</div>}
         <ol className="tour-stops">
           {stops.map((s, j) => (
             <li key={s.id}>
-              <button aria-current={j === i} onClick={() => onStop(j)}>
+              <button aria-current={j === i} onClick={() => onStop(P + j)}>
                 <span className={`stop-num ${s.tone}`}>{j + 1}</span>
                 <span className="stop-title">{s.title}</span>
               </button>
@@ -87,7 +107,7 @@ export function Tour({
         {stops.length > 0 && (
           <ol className="tour-stops books-link">
             <li>
-              <button aria-current={onBooks} onClick={() => onStop(stops.length)}>
+              <button aria-current={onBooks} onClick={() => onStop(P + stops.length)}>
                 <span className="stop-num flat">
                   <BookIcon />
                 </span>
@@ -125,7 +145,9 @@ export function Tour({
       </aside>
 
       <section className="tour-stage">
-        {current ? (
+        {onProduct ? (
+          <ProductPage product={c.product!} story={story} onNext={() => onStop(1)} />
+        ) : current ? (
           <article className="stop" key={`${story?.source}-${current.id}`}>
             <div className="stop-meta">
               Change {i + 1} of {stops.length}
@@ -141,26 +163,21 @@ export function Tour({
             <p className="stop-look">
               <EyeIcon /> {current.look}
             </p>
-            {picks.byStop[i] && (
-              <div className="stop-lenses">
-                <div className="kicker">The question to ask</div>
-                <LensNote comparison={c} note={picks.byStop[i]!} onOpen={openClass} />
-              </div>
-            )}
+            {picks.byStop[i] && <BookLine comparison={c} note={picks.byStop[i]!} onOpen={openClass} />}
             <footer className="stop-foot">
-              <button className="btn" disabled={i === 0} onClick={() => onStop(i - 1)}>
+              <button className="btn" disabled={page === 0} onClick={() => onStop(page - 1)}>
                 ← Back
               </button>
               <button className="btn ghost" onClick={() => onOpen(current.classes[0])}>
                 Explore {shortName(current.classes[0])} in the map
               </button>
-              <button className="btn primary" disabled={i === pages - 1} onClick={() => onStop(i + 1)}>
+              <button className="btn primary" disabled={page === pages - 1} onClick={() => onStop(page + 1)}>
                 Next →
               </button>
             </footer>
           </article>
         ) : onBooks ? (
-          <BooksPage comparison={c} lenses={lenses} rest={picks.rest} onOpen={openClass} onAsk={onAskBooks} onBack={() => onStop(i - 1)} />
+          <BooksPage comparison={c} lenses={lenses} rest={picks.rest} onOpen={openClass} onAsk={onAskBooks} onBack={() => onStop(page - 1)} />
         ) : !story ? (
           <div className="stop empty">
             {storyMissing ? (
@@ -401,6 +418,26 @@ function LensNote({ comparison, note: { lens, q }, onOpen }: { comparison: Compa
   );
 }
 
+/** One quiet line from the books under a key change; it opens into the full note. */
+function BookLine({ comparison, note, onOpen }: { comparison: Comparison; note: Note; onOpen(name: string, tab?: PanelTab): void }) {
+  const [open, setOpen] = useState(false);
+  const verb = { likes: "likes this", asks: "would ask", worries: "worries" }[note.q.tone];
+  if (open)
+    return (
+      <div className="stop-lenses">
+        <LensNote comparison={comparison} note={note} onOpen={onOpen} />
+        <button className="linkish" onClick={() => setOpen(false)}>
+          Hide
+        </button>
+      </div>
+    );
+  return (
+    <button className="book-line" onClick={() => setOpen(true)} title="Read the whole note">
+      <BookIcon /> <b>{WHO[note.lens].split(" ").pop()}</b> {verb}: <span className="book-line-text">{note.q.text}</span>
+    </button>
+  );
+}
+
 function HowToRead() {
   return (
     <details className="how">
@@ -439,6 +476,15 @@ function BookIcon() {
     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
       <path d="M4 5a2 2 0 0 1 2-2h13v16H6a2 2 0 0 0-2 2z" />
       <path d="M4 19V5" />
+    </svg>
+  );
+}
+
+function TableIcon() {
+  return (
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
+      <rect x="3" y="4" width="18" height="16" rx="2" />
+      <path d="M3 10h18M9 10v10" />
     </svg>
   );
 }

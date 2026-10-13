@@ -2,6 +2,7 @@ import fs from "node:fs/promises";
 import type { AreaMap, Comparison, Snapshot } from "../shared/types.js";
 import { AreaAssigner, areasFile, inferAreas, loadAreaFile } from "./areas.js";
 import { compare } from "./compare.js";
+import { productChanges } from "./product.js";
 import { Git } from "./git.js";
 import { RubyReader, type Reader } from "./reader.js";
 import { SnapshotStore } from "./snapshot.js";
@@ -57,7 +58,7 @@ export class Workspace {
     ]);
     const map = await this.areaMap(before);
     const areas = new AreaAssigner(map, [before, after]);
-    return compare({
+    const c = compare({
       repo: { name: this.key, root: this.git.root },
       base: { ...baseInfo, ref: baseRef },
       head: { ...headInfo, ref: headRef },
@@ -68,6 +69,8 @@ export class Workspace {
       isTest: (f) => this.reader.isTest(f),
       claims: (f) => this.reader.claims(f),
     });
+    c.product = await productChanges(this.git, c);
+    return c;
   }
 
   /** Resolves "a..b", "b" (against the default branch), or nothing (current branch). */

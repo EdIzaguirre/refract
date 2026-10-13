@@ -269,7 +269,6 @@ export function App() {
         onMode={changeMode}
         screen={screen}
         onScreen={goScreen}
-        status={status}
         watching={timeline?.watching ?? null}
         onDelta={goTo}
       />

@@ -1,7 +1,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import type { Comparison, Disagreement, LensId, LensQuestion, LensReport, LensResult } from "../shared/types.js";
+import type { Comparison, Disagreement, LensId, LensQuestion, LensReport, LensResult, ProductChanges } from "../shared/types.js";
 import { askClaude } from "./claude.js";
 import type { Workspace } from "./workspace.js";
 
@@ -103,6 +103,27 @@ export function factsFor(c: Comparison) {
       .filter((e) => e.before !== e.after)
       .map((e) => `${areaName(e.from)} -> ${areaName(e.to)}: ${e.before} -> ${e.after} class links`),
     files: c.files.map((f) => `${f.status} ${f.path} +${f.additions} -${f.deletions}`),
+    product: c.product && productFacts(c.product),
+  };
+}
+
+/** The product changes in compact lines a prompt can read. */
+export function productFacts(p: ProductChanges) {
+  const sign = (s: string) => (s === "added" ? "+" : s === "removed" ? "-" : "~");
+  return {
+    tables: p.tables.map(
+      (t) =>
+        `${sign(t.status)} ${t.name}: ${t.columns.map((c) => `${sign(c.status)}${c.name} ${c.type}${c.note ? ` (${c.note})` : ""}`).join(", ")}` +
+        (t.references.some((r) => r.status !== "unchanged") ? `; references ${t.references.filter((r) => r.status !== "unchanged").map((r) => `${sign(r.status)}${r.column} -> ${r.to}`).join(", ")}` : "") +
+        (t.checks.added ? `; ${t.checks.added} new check constraints` : ""),
+    ),
+    migrations: p.migrations.map((m) => `${m.title}${m.schema ? "" : " (moves data only)"}`),
+    screens: p.screens.map((s) => `${sign(s.status)} ${s.controller}: ${s.actions.map((a) => `${sign(a.status)}${a.name}`).join(", ")}`),
+    permissions: p.permissions.map((r) => `${sign(r.status)} ${r.policy}#${r.rule}`),
+    lifecycles: p.lifecycles.map(
+      (l) => `${l.model}.${l.field}: ${l.before.join(", ") || "(none)"} -> ${l.after.join(", ")}; new moves ${l.moves.filter((m) => m.status === "added").map((m) => `${m.from}->${m.to}`).join(", ") || "none"}`,
+    ),
+    jobs: p.jobs.map((j) => `${sign(j.status)} ${j.name} (${j.role})${j.methods.length ? `: ${j.methods.join(", ")}` : ""}`),
   };
 }
 

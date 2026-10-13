@@ -1,4 +1,3 @@
-import { useEffect, useState } from "react";
 import type { Comparison, Delta } from "../../src/shared/types";
 import type { Mode, Screen } from "./App";
 
@@ -20,7 +19,6 @@ export function VerdictStrip({
   onMode,
   screen,
   onScreen,
-  status,
   watching,
   onDelta,
 }: {
@@ -29,7 +27,6 @@ export function VerdictStrip({
   onMode(m: Mode): void;
   screen: Screen;
   onScreen(s: Screen): void;
-  status: string;
   watching: string | null;
   onDelta(t?: Delta["target"]): void;
 }) {
@@ -52,7 +49,6 @@ export function VerdictStrip({
           </div>
         )}
         <div className="spacer" />
-        <StatusNote status={status} />
         <div className="seg views" role="group" aria-label="View">
           {(["tour", "explore"] as Screen[]).map((v) => (
             <button key={v} aria-pressed={screen === v} onClick={() => onScreen(v)} title={v === "tour" ? "The key changes, explained (t)" : "The whole zoomable map, commit by commit (e)"}>
@@ -100,24 +96,4 @@ export function VerdictStrip({
 /** A branch name reads better than a SHA; fall back to the short SHA when the ref is one. */
 function refName(r: Comparison["head"]): string {
   return !r.ref || /^[0-9a-f]{7,40}$/i.test(r.ref) || r.ref === "HEAD" ? r.short : r.ref.replace(/^origin\//, "");
-}
-
-/**
- * What Refract is doing, shown briefly when it changes and then folded into
- * a dot; the full message stays on hover.
- */
-function StatusNote({ status }: { status: string }) {
-  const [fresh, setFresh] = useState(true);
-  useEffect(() => {
-    setFresh(true);
-    const t = setTimeout(() => setFresh(false), 6000);
-    return () => clearTimeout(t);
-  }, [status]);
-  if (!status) return null;
-  return (
-    <span className={`status ${fresh ? "fresh" : "quiet"}`} title={status}>
-      <span className="status-dot" />
-      {fresh && <span className="status-text">{status}</span>}
-    </span>
-  );
 }

@@ -1,6 +1,6 @@
 import fs from "node:fs/promises";
 import path from "node:path";
-import type { ClassChange, Comparison, Delta, Story, StoryStop, Tone } from "../shared/types.js";
+import type { ClassChange, Comparison, Delta, ProductPart, Story, StoryStop, Tone } from "../shared/types.js";
 import { askClaude } from "./claude.js";
 import { diffFor, factsFor } from "./lenses.js";
 import type { Workspace } from "./workspace.js";
@@ -13,11 +13,16 @@ import type { Workspace } from "./workspace.js";
  */
 
 const MAX_CLASSES = 6;
+const PARTS: ProductPart[] = ["data", "screens", "permissions", "lifecycles", "jobs"];
 
 const STORY_SCHEMA = {
   type: "object",
   properties: {
     summary: { type: "string" },
+    product: {
+      type: "object",
+      properties: Object.fromEntries(PARTS.map((p) => [p, { type: "string" }])),
+    },
     stops: {
       type: "array",
       items: {
@@ -33,7 +38,7 @@ const STORY_SCHEMA = {
       },
     },
   },
-  required: ["summary", "stops"],
+  required: ["summary", "product", "stops"],
 };
 
 /** Classes linked to `name` by a dependency the change added or removed, most relevant first. */
@@ -145,8 +150,9 @@ function storyPrompt(facts: object, diff: string, lensQuestions: string[]): stri
   return `You are writing the guided tour in Refract, a tool that shows a developer how a code change reshaped their codebase, often a change an AI agent made. The developer is busy and visual. They have not read the diff. Your job is to tell them what this change did to the structure of the code, in plain words, as a short tour.
 
 Write:
-- summary: one plain sentence saying what the change does, the way a colleague would say it out loud. Name the main classes. No numbers unless one is the point.
-- stops: 3 to 5 stops, most important first. Each stop is one part of the story, and the stops must not overlap: a class can be the main class of only one stop. When a new or changed class has both an upside and an open question (say, it pulls logic into one place but may now do two jobs), tell both in that class's one stop rather than splitting them into two. Each stop is one part of the story:
+- summary: one plain sentence saying what the change does for the people who use the product, the way a colleague would say it out loud. No numbers unless one is the point.
+- product: the page opens with what changed in the product, read from the code: new tables and columns (data), new screens and actions (screens), permission rules (permissions), the states a record moves through (lifecycles), and background jobs and emails (jobs); see "product" in the measurements. For each part that has something in it, write one plain sentence saying what it means for the product, like "Timesheets can now carry fees and expenses, each its own row in timesheet_charges." Leave a part out when the measurements have nothing for it. Data migrations that only move data (like granting a new permission to existing roles) belong in data or permissions.
+- stops: 3 to 5 stops about the code's structure, most important first; the product section already covers what the change does, so these say how the code was shaped to do it. Each stop is one part of the story, and the stops must not overlap: a class can be the main class of only one stop. When a new or changed class has both an upside and an open question (say, it pulls logic into one place but may now do two jobs), tell both in that class's one stop rather than splitting them into two. Each stop is one part of the story:
   - title: a short headline in plain words (under 60 characters), like "Invitation sending moved into one service".
   - explain: two or three short sentences. What was true before, what is true now, and why a reader should care. Use the measurements; quote a number only when it helps.
   - look: one sentence telling the reader what to look at in the drawing. The drawing shows the classes as boxes before and after side by side. A box's width is its public interface; its height is its code. Arrows are dependencies: green arrows are new, dashed red arrows were removed, grey arrows did not change. Boxes that are new appear only on the after side.
@@ -174,9 +180,13 @@ async function cachePath(ws: Workspace, c: Comparison): Promise<string> {
   return path.join(dir, `${c.base.sha}-${c.head.sha}.json`);
 }
 
+/** Bumped when the story's shape or prompt changes, so older cached stories are written again. */
+const STORY_VERSION = 2;
+
 export async function cachedStory(ws: Workspace, c: Comparison): Promise<Story | null> {
   try {
-    return JSON.parse(await fs.readFile(await cachePath(ws, c), "utf8")) as Story;
+    const story = JSON.parse(await fs.readFile(await cachePath(ws, c), "utf8")) as Story & { version?: number };
+    return story.version === STORY_VERSION ? story : null;
   } catch {
     return null;
   }
@@ -186,7 +196,7 @@ export async function cachedStory(ws: Workspace, c: Comparison): Promise<Story |
 export async function writeStory(ws: Workspace, c: Comparison, lensQuestions: string[] = []): Promise<Story> {
   const measured = measuredStory(c);
   try {
-    const out = await askClaude<{ summary: string; stops: Omit<StoryStop, "id">[] }>(
+    const out = await askClaude<{ summary: string; product?: Story["product"]; stops: Omit<StoryStop, "id">[] }>(
       storyPrompt(factsFor(c), await diffFor(ws, c, 60_000), lensQuestions),
       STORY_SCHEMA,
       { cwd: ws.git.root },
@@ -195,8 +205,9 @@ export async function writeStory(ws: Workspace, c: Comparison, lensQuestions: st
       .map((s, i): StoryStop => ({ ...s, id: `s${i}`, tone: (["good", "bad", "ask", "flat"].includes(s.tone) ? s.tone : "flat") as Tone, classes: pick(c, resolve(c, s.classes ?? [])) }))
       .filter((s) => s.classes.length > 0);
     if (!stops.length || !out.summary) return { ...measured, error: "Claude Code returned no usable stops" };
-    const story: Story = { base: c.base.sha, head: c.head.sha, source: "claude", status: "done", summary: out.summary, stops };
-    await fs.writeFile(await cachePath(ws, c), JSON.stringify(story, null, 2));
+    const product = Object.fromEntries(PARTS.filter((p) => out.product?.[p]?.trim()).map((p) => [p, out.product![p]!.trim()]));
+    const story: Story = { base: c.base.sha, head: c.head.sha, source: "claude", status: "done", summary: out.summary, product, stops };
+    await fs.writeFile(await cachePath(ws, c), JSON.stringify({ ...story, version: STORY_VERSION }, null, 2));
     return story;
   } catch (e) {
     return { ...measured, error: (e as Error).message };

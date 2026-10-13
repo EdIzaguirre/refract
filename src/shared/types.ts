@@ -256,6 +256,8 @@ export interface Comparison {
   areaSource: AreaMap["source"];
   areaFile?: string;
   generatedAt: string;
+  /** Filled in by the workspace after the class comparison: what the change does to the product. */
+  product?: ProductChanges;
 }
 
 // ---------- lenses ----------
@@ -322,8 +324,12 @@ export interface Story {
   /** One plain sentence on what the change does. */
   summary: string;
   stops: StoryStop[];
+  /** One plain sentence per part of "What changed in the product", when Claude wrote the story. */
+  product?: Partial<Record<ProductPart, string>>;
   error?: string;
 }
+
+export type ProductPart = "data" | "screens" | "permissions" | "lifecycles" | "jobs";
 
 // ---------- request flows ----------
 
@@ -371,4 +377,63 @@ export interface Timeline {
 export interface ServerEvent {
   type: "comparison" | "timeline" | "lenses" | "status" | "flows" | "story";
   payload: unknown;
+}
+
+// ---------- product ----------
+
+/** What the change does to the product, read straight from the code: data, screens, permissions, lifecycles, jobs. */
+export interface ProductChanges {
+  tables: TableChange[];
+  /** Migrations the change adds, by file name, including ones that only move data. */
+  migrations: { file: string; title: string; schema: boolean }[];
+  screens: ScreenChange[];
+  /** Route lines added to and removed from config/routes.rb, comments dropped. */
+  routes: { added: string[]; removed: string[] };
+  permissions: RuleChange[];
+  lifecycles: LifecycleChange[];
+  jobs: { name: string; role: Role; status: ChangeStatus; methods: string[] }[];
+}
+
+export interface ColumnChange {
+  name: string;
+  type: string;
+  status: ChangeStatus;
+  /** "not null", "default: open" and the like, as written in the schema. */
+  note?: string;
+  /** For a column whose type or options changed, what it was. */
+  was?: string;
+}
+
+export interface TableChange {
+  name: string;
+  status: ChangeStatus;
+  /** Every column of a new table; only the columns that moved for a changed one. */
+  columns: ColumnChange[];
+  /** Columns the change left alone, counted so the drawing can say "and 12 more". */
+  otherColumns: number;
+  /** Foreign keys on the after side (or before, for a removed table). */
+  references: { to: string; column: string; status: ChangeStatus }[];
+  checks: { added: number; removed: number };
+}
+
+export interface ScreenChange {
+  controller: string;
+  status: ChangeStatus;
+  actions: { name: string; status: ChangeStatus }[];
+}
+
+export interface RuleChange {
+  policy: string;
+  rule: string;
+  status: ChangeStatus;
+}
+
+export interface LifecycleChange {
+  model: string;
+  field: string;
+  status: ChangeStatus;
+  before: string[];
+  after: string[];
+  /** "from → to" moves, when the model lists them. */
+  moves: { from: string; to: string; status: ChangeStatus }[];
 }
