@@ -144,17 +144,17 @@ export async function diffFor(ws: Workspace, c: Comparison, budget = 90_000): Pr
 }
 
 function lensPrompt(lens: (typeof LENSES)[number], checklist: string, facts: object, diff: string): string {
-  return `You are the ${lens.who} lens in Refract, a tool that helps a developer judge a code change (often an AI agent's branch) before merging it. You speak for the book "${lens.book}" and only for it.
+  return `In Refract, a tool that helps a developer judge a code change (often an AI agent's branch) before merging it, you speak as ${lens.who}, reviewing the change the way they would as a colleague. Speak in the first person about what you want from this code and what you would push for, not about what a book says: "I want...", "I'd ask...", "I worry...". Do not write "the book" or name the book.
 
-Argue only from the checklist below. It was built from the book with quotes checked word for word. Never cite the book from memory, never invent a quote, and never cite anything the checklist's "Claims to correct" section says the book does not say. When you quote, copy the quote exactly from the checklist.
+Your views are the ones in the checklist below, which was built from your book "${lens.book}" with quotes checked word for word. Argue only from it. Never cite the book from memory, never invent a quote, and never cite anything the checklist's "Claims to correct" section says the book does not say. When you quote, copy the quote exactly from the checklist.
 
 The measurements below come from parsing the code at both commits. Treat them as facts. Every question you write must point at something specific in the measurements or the diff, and its evidence must say what was measured or seen.
 
-First write overall: two or three plain sentences on how this book would judge the change as a whole, the way its author might sum it up to a colleague. Name the one or two things that matter most to this book, good or bad. No quotes and no rule numbers here.
+First write overall: two or three plain sentences, in your own voice, on what you think of the change as a whole and what you would want from it, as you might say it to the developer over coffee. Name the one or two things that matter most to you, good or bad. No quotes and no rule numbers here.
 
-Then write 2 to 5 items. Each is either something the book would like about this change ("likes") or a pointed question it would ask ("asks"), or a real concern ("worries"). Lead with what matters most. Do not give scores. Questions should be answerable: name the class or method and say what would change the answer. Plain, direct sentences; no hedging filler; no em dashes. Put the class (or area, or "Class#method") the item is about in target, using names exactly as they appear in the measurements. Use "Class#method" (or "Class.method" for a class method) whenever the item is about a specific method, so the reader can jump straight to that code.
+Then write 2 to 5 items, each in your own voice. Each is either something you like about this change ("likes"), a pointed question you would ask ("asks"), or a real concern ("worries"). Lead with what matters most. Do not give scores. Questions should be answerable: name the class or method and say what would change the answer. Plain, direct sentences; no hedging filler; no em dashes. Put the class (or area, or "Class#method") the item is about in target, using names exactly as they appear in the measurements. Use "Class#method" (or "Class.method" for a class method) whenever the item is about a specific method, so the reader can jump straight to that code.
 
-The book treats its rules as guidelines, so phrase hits as questions about the cost of change, not as failures.
+You treat your rules as guidelines, so phrase hits as questions about the cost of change, not as failures.
 
 <checklist>
 ${checklist}
@@ -170,7 +170,7 @@ ${diff}
 }
 
 function disagreementPrompt(results: LensResult[], facts: object): string {
-  return `Three design lenses reviewed the same code change. Find the places where they would disagree about the same piece of code, where one likes what another questions, or where they weigh the same trade-off differently. Return at most 2, only real ones; return an empty list if they agree. For each, say in one sentence per lens where it stands, using only what that lens said below, and one sentence on the trade-off. Plain sentences, no em dashes. target names the class exactly as in the measurements.
+  return `Three authors on code design (Sandi Metz, John Ousterhout, David Bryant Copeland) reviewed the same code change. Find the places where they would disagree about the same piece of code, where one likes what another questions, or where they weigh the same trade-off differently. Return at most 2, only real ones; return an empty list if they agree. For each, say in one sentence per author where they stand, in their own first-person voice ("I'd split it...", not "Metz worries..."), using only what that author said below, and one sentence on the trade-off. Plain sentences, no em dashes. target names the class exactly as in the measurements.
 
 <lenses>
 ${JSON.stringify(results.map((r) => ({ lens: r.lens, questions: r.questions })), null, 1)}
@@ -184,7 +184,8 @@ ${JSON.stringify((facts as { classes: unknown }).classes, null, 1).slice(0, 30_0
 async function cachePath(ws: Workspace, c: Comparison): Promise<string> {
   const dir = path.join(await ws.git.gitDir(), "refract", "lenses");
   await fs.mkdir(dir, { recursive: true });
-  return path.join(dir, `${c.base.sha}-${c.head.sha}.json`);
+  // v2: the authors speak in their own voice; older reports are asked again.
+  return path.join(dir, `${c.base.sha}-${c.head.sha}-v2.json`);
 }
 
 export async function cachedLenses(ws: Workspace, c: Comparison): Promise<LensReport | null> {

@@ -444,8 +444,7 @@ a { color: var(--accent); }
 .tbl-row.removed { fill: var(--bad); text-decoration: line-through; }
 .tbl-type { fill: var(--faint); }
 .tbl-more { font-family: var(--font-body); font-size: 9.5px; fill: var(--faint); font-style: italic; }
-.book-line { all: unset; box-sizing: border-box; width: 100%; min-width: 0; overflow: hidden; cursor: pointer; display: flex; gap: 6px; align-items: baseline; color: var(--muted); font-size: 0.9rem; line-height: 1.45; max-width: 100%; }
-.book-line svg { flex: none; transform: translateY(2px); }
-.book-line b { color: var(--ink); font-weight: 500; white-space: nowrap; }
-.book-line-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
-.book-line:hover .book-line-text { color: var(--ink); text-decoration: underline; text-decoration-color: var(--rule); }
+.book-line { all: unset; box-sizing: border-box; display: block; width: 100%; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; color: var(--muted); font-size: 0.9rem; line-height: 1.45; }
+.book-line svg { vertical-align: -2px; margin-right: 4px; }
+.book-line b { color: var(--ink); font-weight: 500; }
+.book-line:hover { color: var(--ink); }

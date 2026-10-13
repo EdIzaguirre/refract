@@ -111,7 +111,7 @@ export function Tour({
                 <span className="stop-num flat">
                   <BookIcon />
                 </span>
-                <span className="stop-title">What the books think</span>
+                <span className="stop-title">What the authors think</span>
               </button>
             </li>
           </ol>
@@ -291,7 +291,7 @@ function pickQuestions(lenses: LensReport | null, stops: Story["stops"]): { bySt
   return { byStop, rest };
 }
 
-/** The books' overall take on the whole change, where they disagree, and every other question. */
+/** Each author's overall take on the whole change, where they disagree, and every other question. */
 function BooksPage({
   comparison,
   lenses,
@@ -312,20 +312,20 @@ function BooksPage({
   return (
     <article className="stop" key="books">
       <div className="stop-meta">After the key changes</div>
-      <h2 className="stop-heading">What the books think</h2>
+      <h2 className="stop-heading">What the authors think</h2>
       <p className="stop-explain">
-        Three books on code design each read the whole change. They often agree, but not always, and they argue only from checklists built from their books.
+        Three authors on code design each look at the whole change and say what they would want from it. They often agree, but not always. Each argues only from a checklist built from their own book, with its quotes checked.
       </p>
       {!ran ? (
         <div className="books-empty">
-          <p>The books have not read this change yet.</p>
+          <p>The authors have not looked at this change yet.</p>
           <button className="btn primary" onClick={onAsk}>
-            Ask the books
+            Ask the authors
           </button>
         </div>
       ) : lenses.status === "running" ? (
         <p className="stop-explain">
-          <span className="spinner small" /> The books are reading the change.
+          <span className="spinner small" /> The authors are reading the change.
         </p>
       ) : (
         <>
@@ -341,16 +341,16 @@ function BooksPage({
                 </div>
                 <p className="book-take">
                   {r?.overall ??
-                    (r?.questions[0]?.text ? `${r.questions[0].text}` : r?.error ? "This book could not read the change." : "No take yet.")}
+                    (r?.questions[0]?.text ? `${r.questions[0].text}` : r?.error ? "This author could not read the change." : "No take yet.")}
                 </p>
               </section>
             ))}
           </div>
           {!results.some(({ r }) => r?.overall) && (
             <p className="rail-note">
-              These notes were written before the books gave an overall take.{" "}
+              These notes were written before the authors spoke in their own voice.{" "}
               <button className="linkish" onClick={onAsk}>
-                Ask the books again
+                Ask the authors again
               </button>
             </p>
           )}
@@ -373,7 +373,7 @@ function BooksPage({
           {rest.length > 0 && (
             <details className="all-questions">
               <summary>
-                {rest.length} more question{rest.length === 1 ? "" : "s"} from the books
+                {rest.length} more note{rest.length === 1 ? "" : "s"} from the authors
               </summary>
               <div className="stop-lenses">
                 {rest.map((n, j) => (
@@ -418,10 +418,10 @@ function LensNote({ comparison, note: { lens, q }, onOpen }: { comparison: Compa
   );
 }
 
-/** One quiet line from the books under a key change; it opens into the full note. */
+/** One quiet line from an author under a key change; it opens into the full note. */
 function BookLine({ comparison, note, onOpen }: { comparison: Comparison; note: Note; onOpen(name: string, tab?: PanelTab): void }) {
   const [open, setOpen] = useState(false);
-  const verb = { likes: "likes this", asks: "would ask", worries: "worries" }[note.q.tone];
+  const verb = { likes: "likes", asks: "asks", worries: "worries" }[note.q.tone];
   if (open)
     return (
       <div className="stop-lenses">
@@ -433,7 +433,8 @@ function BookLine({ comparison, note, onOpen }: { comparison: Comparison; note: 
     );
   return (
     <button className="book-line" onClick={() => setOpen(true)} title="Read the whole note">
-      <BookIcon /> <b>{WHO[note.lens].split(" ").pop()}</b> {verb}: <span className="book-line-text">{note.q.text}</span>
+      <BookIcon /> <b>{WHO[note.lens].split(" ").pop()}</b> {`${verb}: `}
+      {note.q.text}
     </button>
   );
 }
