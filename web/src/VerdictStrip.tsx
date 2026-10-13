@@ -65,8 +65,8 @@ export function VerdictStrip({
         </span>
         <div className="seg views" role="group" aria-label="View">
           {(["tour", "explore"] as Screen[]).map((v) => (
-            <button key={v} aria-pressed={screen === v} onClick={() => onScreen(v)} title={v === "tour" ? "The change told in a few stops (t)" : "The whole zoomable map (e)"}>
-              {v === "tour" ? "Tour" : "Explore"}
+            <button key={v} aria-pressed={screen === v} onClick={() => onScreen(v)} title={v === "tour" ? "The key changes, explained (t)" : "The whole zoomable map, commit by commit (e)"}>
+              {v === "tour" ? "Summary" : "Explore"}
             </button>
           ))}
         </div>

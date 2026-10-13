@@ -153,7 +153,7 @@ Write:
   - tone: good (structure got better), bad (got worse), ask (a real question), flat (neutral context).
   - classes: 2 to 6 class names that the stop is about, copied exactly from the measurements, the main one first. Pick the classes whose boxes and arrows tell this stop's story; leave out bystanders.
 
-Thresholds in the measurements (like 300 lines) are Refract's own rules of thumb, not limits from a book; do not call them limits. Avoid jargon the reader must decode: say "classes that call it" rather than "fan-in". No em dashes, no hedging filler, no headings or markdown.
+Thresholds in the measurements (like 300 lines) are Refract's own rules of thumb, not limits from a book; do not call them limits. Avoid jargon the reader must decode: say "classes that call it" rather than "fan-in". No em dashes, no hedging filler, no headings or markdown. The page calls each stop a "key change"; never write the word "stop" in the text.
 
 <measurements>
 ${JSON.stringify(facts, null, 1)}

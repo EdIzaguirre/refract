@@ -2,14 +2,14 @@
 
 See how a code change reshaped a codebase, so you can judge an AI agent's branch before you merge it.
 
-Run `refract` in a git repository and a browser tab opens on a short guided tour of the change: one plain sentence on what it does, then a few stops, each with a small before-and-after drawing of only the classes it is about. When you want to wander, the Explore view is one zoomable map of the whole change: business areas, then the classes inside an area, then one class before and after, then its code. Point it at a branch an agent is working on and the map updates on every commit. Three lenses, written from the books of Sandi Metz, John Ousterhout and David Bryant Copeland, read the measurements and ask pointed questions about the change.
+Run `refract` in a git repository and a browser tab opens on a summary of the change: one plain sentence on what it does, then its 3 to 5 key changes, each with a small before-and-after drawing of only the classes it is about. When you want to wander, the Explore view is one zoomable map of the whole change: business areas, then the classes inside an area, then one class before and after, then its code. Point it at a branch an agent is working on and the map updates on every commit. Three lenses, written from the books of Sandi Metz, John Ousterhout and David Bryant Copeland, read the measurements and ask pointed questions about the change.
 
 Ruby and Rails come first. Everything language-specific sits behind one reader interface, so another language is a new reader, not a rewrite.
 
 ## What you see
 
-- **Tour** (the default). Claude Code tells the change as 3 to 5 stops from the measurements, such as "Invitation sending moved into one service". Each stop has two or three plain sentences, a before and after drawing of just its classes with a line on what to look for, and what the lenses asked about those classes. <kbd>←</kbd>/<kbd>→</kbd> step through the stops; click a box, or "Explore … in the map", to jump into the map at that class. Until Claude has written the tour, or without Claude Code, the stops come straight from the measured deltas.
-- **Explore** (<kbd>e</kbd>, and <kbd>t</kbd> back to the tour) is everything below.
+- **Summary** (the default). Claude Code picks the 3 to 5 key changes from the measurements, the diff and the lens questions, such as "Invitation sending moved into one service", and writes each one up. Each has two or three plain sentences, a before and after drawing of just its classes with a line on what to look for, and what the lenses asked about those classes. <kbd>←</kbd>/<kbd>→</kbd> step through them; click a box, or "Explore … in the map", to jump into the map at that class. Until Claude has written it, or without Claude Code, each key change is one of the measured shifts. The verdict counts the key changes shown: how many make the code better, how many worse, how many are open questions. The summary always covers the whole branch; the commit timeline lives in Explore.
+- **Explore** (<kbd>e</kbd>, and <kbd>t</kbd> back to the summary) is everything below.
 - **Verdict strip.** Base and head, a measured verdict and the handful of deltas that drove it. The verdict weighs what got better against what got worse ("Better", "Mostly worse", "Mixed"…) and adds "with questions" when some changes are worth asking about; questions never count as worse. Click a delta to fly the map to what it is about.
 - **The map.**
   1. *Business areas.* Each area is a tile. Changed areas glow; arrows between areas show dependencies, new ones in the accent colour.
@@ -103,7 +103,7 @@ git commit ──► language reader ──► snapshot ──► compare(base, 
 - `readers/ruby/reader.rb` parses Ruby with Prism and prints facts per file: classes, methods with visibility, parameters, branches and calls, constants referenced, and the Rails declarations that widen a class (associations, callbacks, `helper_method`, scopes, delegates).
 - `src/core/snapshot.ts` folds those facts into one snapshot per commit. Facts are cached per git blob in `.git/refract/`, so a new commit only re-reads the files it changed. Nested helper classes (a service's `Result`) fold into their outer class.
 - `src/core/compare.ts` compares two snapshots: class shapes, method changes, dependency edges, area roll-ups, and the measured deltas behind the verdict.
-- `src/core/story.ts` writes the tour: Claude Code turns the measurements, the diff and the lens questions into stops, cached in `.git/refract/stories/`; `measuredStory` builds stops from the deltas when Claude is not available.
+- `src/core/story.ts` writes the summary: Claude Code turns the measurements, the diff and the lens questions into key changes, cached in `.git/refract/stories/`; `measuredStory` builds them from the deltas when Claude is not available.
 - `src/core/lenses.ts` sends each lens its checklist from `lenses/*.md`, the measurements and the diff, and asks for structured questions. The checklists were built from the books with quotes checked word for word; lenses must argue only from them.
 - `src/server/server.ts` serves the app, polls the watched branch every 2 seconds and pushes new comparisons, lens progress and status over Server-Sent Events.
 - `web/` is React and SVG with d3-zoom; ELK lays out each area's class graph; Mermaid draws the sequence diagrams.

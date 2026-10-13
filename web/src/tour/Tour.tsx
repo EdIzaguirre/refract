@@ -41,12 +41,8 @@ export function Tour({
       <aside className="tour-nav">
         <div className="kicker">What this change does</div>
         <h1 className="tour-summary">{story?.summary ?? c.verdict.summary}</h1>
-        <div className="tour-verdict">
-          <span className={`verdict-label ${c.verdict.tone}`}>{c.verdict.label}</span>
-          <span className="tour-counts">
-            {c.verdict.good} better · {c.verdict.bad} worse · {c.verdict.ask} to ask about
-          </span>
-        </div>
+        {stops.length > 0 && <Verdict stops={stops} />}
+        {stops.length > 0 && <div className="kicker">Key changes</div>}
         <ol className="tour-stops">
           {stops.map((s, j) => (
             <li key={s.id}>
@@ -60,19 +56,28 @@ export function Tour({
         <div className="tour-source">
           {story?.status === "running" ? (
             <>
-              <span className="spinner small" /> Claude Code is writing a plainer version of this tour.
+              <span className="spinner small" /> Claude Code is writing a plainer version of this summary.
             </>
-          ) : story?.source === "claude" ? (
-            "Told by Claude Code from the measurements."
-          ) : !story ? null : (
-            <>
-              Built from the measurements alone.{" "}
-              <button className="linkish" onClick={onTell}>
-                Ask Claude Code to tell it
-              </button>
-            </>
+          ) : story?.source === "claude" || !story ? null : (
+            <button className="linkish" onClick={onTell}>
+              Ask Claude Code to write this summary
+            </button>
           )}
         </div>
+        {story && (
+          <details className="how made">
+            <summary>How this summary was made</summary>
+            {story.source === "claude" ? (
+              <p>
+                Refract measured every class at the start of the branch and at its newest commit: its size, its public methods and what it depends on. Claude Code read those measurements, the diff and the questions from the three books, then picked the 3 to 5 changes that matter most to the code's structure and wrote each one up, most important first. The drawings come from the measurements, not from Claude.
+              </p>
+            ) : (
+              <p>
+                Refract measured every class at the start of the branch and at its newest commit: its size, its public methods and what it depends on. Each key change here is one of the measured shifts that stood out, such as a class many others use getting fewer callers, a large class growing or shrinking, or new classes. Claude Code has not written this one up yet.
+              </p>
+            )}
+          </details>
+        )}
         <HowToRead />
       </aside>
 
@@ -80,7 +85,7 @@ export function Tour({
         {current ? (
           <article className="stop" key={`${story?.source}-${current.id}`}>
             <div className="stop-meta">
-              Stop {i + 1} of {stops.length}
+              Change {i + 1} of {stops.length}
               <span className={`pill ${current.tone}`}>{TONE_WORD[current.tone]}</span>
             </div>
             <h2 className="stop-heading">{current.title}</h2>
@@ -106,14 +111,14 @@ export function Tour({
           <div className="stop empty">
             {storyMissing ? (
               <>
-                <h2 className="stop-heading">Restart Refract to see the tour</h2>
+                <h2 className="stop-heading">Restart Refract to see the summary</h2>
                 <p className="stop-explain">
                   This page is newer than the Refract server running it. Stop <code>refract</code> with Ctrl-C and start it again; the Explore view works meanwhile.
                 </p>
               </>
             ) : (
               <>
-                <h2 className="stop-heading">Preparing the tour</h2>
+                <h2 className="stop-heading">Preparing the summary</h2>
                 <p className="stop-explain">
                   <span className="spinner small" /> Measuring this commit.
                 </p>
@@ -127,6 +132,41 @@ export function Tour({
           </div>
         )}
       </section>
+    </div>
+  );
+}
+
+/** The verdict, counted over the key changes the reader can see. */
+function Verdict({ stops }: { stops: Story["stops"] }) {
+  const n = (t: string) => stops.filter((s) => s.tone === t).length;
+  const good = n("good");
+  const bad = n("bad");
+  const ask = n("ask");
+  const [label, tone] =
+    good > bad
+      ? [bad === 0 ? "Better" : "Mostly better", "good"]
+      : bad > good
+        ? [good === 0 ? "Worse" : "Mostly worse", "bad"]
+        : good > 0
+          ? ["Mixed", "ask"]
+          : ask > 0
+            ? ["Open questions", "ask"]
+            : ["Neutral", "flat"];
+  const plural = (k: number, one: string, many: string) => `${k} ${k === 1 ? one : many}`;
+  const parts = [
+    good && plural(good, "makes the code better", "make the code better"),
+    bad && plural(bad, "makes it worse", "make it worse"),
+    ask && plural(ask, "is an open question", "are open questions"),
+  ].filter(Boolean) as string[];
+  const list = parts.length > 1 ? `${parts.slice(0, -1).join(", ")} and ${parts[parts.length - 1]}` : parts[0];
+  return (
+    <div className="tour-verdict">
+      <span className={`verdict-label ${tone}`}>{label}</span>
+      {list && (
+        <span className="tour-counts">
+          Of the {stops.length} key changes below, {list}.
+        </span>
+      )}
     </div>
   );
 }
@@ -165,7 +205,7 @@ function LensNotes({ lenses, classes }: { lenses: LensReport | null; classes: st
 
 function HowToRead() {
   return (
-    <details className="how" open>
+    <details className="how">
       <summary>How to read the drawings</summary>
       <div className="how-row">
         <svg width="46" height="34" viewBox="0 0 46 34" aria-hidden>

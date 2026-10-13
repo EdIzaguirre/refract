@@ -180,6 +180,15 @@ export function App() {
     [liveHead],
   );
 
+  // The summary always covers the whole branch; stepping through commits belongs to Explore.
+  const goScreen = useCallback(
+    (next: Screen) => {
+      if (next === "tour" && liveHead && head !== liveHead) pickHead(liveHead);
+      setScreen(next);
+    },
+    [liveHead, head, pickHead],
+  );
+
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if ((e.target as HTMLElement).closest("input, textarea")) return;
@@ -190,7 +199,7 @@ export function App() {
         else if (e.key === "e") setScreen("explore");
         return;
       }
-      if (e.key === "t") setScreen("tour");
+      if (e.key === "t") goScreen("tour");
       else if (e.key === " " || e.key === "b") {
         e.preventDefault();
         changeMode(mode === "after" ? "before" : "after");
@@ -205,7 +214,7 @@ export function App() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [mode, changeMode, timeline, head, pickHead, screen, story, stop]);
+  }, [mode, changeMode, timeline, head, pickHead, screen, story, stop, goScreen]);
 
   // Keep the tour on the commit being shown, however the comparison arrived (scrubbing or a live commit).
   const shown = comparison?.head.sha;
@@ -258,7 +267,7 @@ export function App() {
         mode={mode}
         onMode={changeMode}
         screen={screen}
-        onScreen={setScreen}
+        onScreen={goScreen}
         status={status}
         watching={timeline?.watching ?? null}
         onDelta={goTo}
@@ -350,7 +359,7 @@ export function App() {
         <LensRail report={lenses} comparison={comparison} onRun={() => head && api.runLenses(head).then(setLenses)} onTarget={goTo} />
       </div>
       )}
-      <TimelineBar timeline={timeline} head={head} liveHead={liveHead} fresh={fresh} onPick={pickHead} />
+      {screen === "explore" && <TimelineBar timeline={timeline} head={head} liveHead={liveHead} fresh={fresh} onPick={pickHead} />}
     </div>
   );
 }
