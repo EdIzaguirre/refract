@@ -3,6 +3,7 @@ import { ClassPanel, type PanelTab } from "../ClassPanel";
 import type { Comparison, LensId, LensQuestion, LensReport, Story } from "../../../src/shared/types";
 import { StopDiagram, shortName } from "./StopDiagram";
 import { MethodCode, resolveTarget } from "./MethodCode";
+import { LENS_INFO } from "../LensRail";
 
 interface Note {
   lens: LensId;
@@ -26,6 +27,7 @@ export function Tour({
   onStop,
   onOpen,
   onTell,
+  onAskBooks,
 }: {
   comparison: Comparison;
   story: Story | null;
@@ -35,14 +37,16 @@ export function Tour({
   onStop(i: number): void;
   onOpen(name: string): void;
   onTell(): void;
+  onAskBooks(): void;
 }) {
   const stops = story?.stops ?? [];
-  const notes = useMemo(() => assignNotes(lenses, stops), [lenses, stops]);
-  // Notes about classes no key change shows get a page of their own after the key changes.
-  const pages = stops.length + (notes.rest.length ? 1 : 0);
+  // Each key change carries the one sharpest question from the books; the books' overall take,
+  // where they disagree and every other question live on one page after the key changes.
+  const picks = useMemo(() => pickQuestions(lenses, stops), [lenses, stops]);
+  const pages = stops.length + (stops.length ? 1 : 0);
   const i = Math.min(stop, Math.max(0, pages - 1));
   const current = stops[i];
-  const onRest = !current && i === stops.length && notes.rest.length > 0;
+  const onBooks = !current && stops.length > 0 && i === stops.length;
   const openClass = (name: string, t: PanelTab = "shape") => {
     setTab(t);
     setModal(name);
@@ -79,15 +83,19 @@ export function Tour({
               </button>
             </li>
           ))}
-          {notes.rest.length > 0 && (
+        </ol>
+        {stops.length > 0 && (
+          <ol className="tour-stops books-link">
             <li>
-              <button aria-current={onRest} onClick={() => onStop(stops.length)}>
-                <span className="stop-num flat">+</span>
-                <span className="stop-title">More from the books</span>
+              <button aria-current={onBooks} onClick={() => onStop(stops.length)}>
+                <span className="stop-num flat">
+                  <BookIcon />
+                </span>
+                <span className="stop-title">What the books think</span>
               </button>
             </li>
-          )}
-        </ol>
+          </ol>
+        )}
         <div className="tour-source">
           {story?.status === "running" ? (
             <>
@@ -133,7 +141,12 @@ export function Tour({
             <p className="stop-look">
               <EyeIcon /> {current.look}
             </p>
-            <LensNotes comparison={c} notes={notes.byStop[i] ?? []} title="What the books ask about this" onOpen={openClass} />
+            {picks.byStop[i] && (
+              <div className="stop-lenses">
+                <div className="kicker">The question to ask</div>
+                <LensNote comparison={c} note={picks.byStop[i]!} onOpen={openClass} />
+              </div>
+            )}
             <footer className="stop-foot">
               <button className="btn" disabled={i === 0} onClick={() => onStop(i - 1)}>
                 ← Back
@@ -146,18 +159,8 @@ export function Tour({
               </button>
             </footer>
           </article>
-        ) : onRest ? (
-          <article className="stop" key="rest">
-            <div className="stop-meta">After the key changes</div>
-            <h2 className="stop-heading">More from the books</h2>
-            <p className="stop-explain">What the three books asked about classes none of the key changes covers.</p>
-            <LensNotes comparison={c} notes={notes.rest} onOpen={openClass} />
-            <footer className="stop-foot">
-              <button className="btn" onClick={() => onStop(i - 1)}>
-                ← Back
-              </button>
-            </footer>
-          </article>
+        ) : onBooks ? (
+          <BooksPage comparison={c} lenses={lenses} rest={picks.rest} onOpen={openClass} onAsk={onAskBooks} onBack={() => onStop(i - 1)} />
         ) : !story ? (
           <div className="stop empty">
             {storyMissing ? (
@@ -244,44 +247,132 @@ function Verdict({ stops }: { stops: Story["stops"] }) {
 }
 
 /**
- * Gives each lens note one home: the first key change whose main class it is
- * about, else the first key change that draws its class. The rest go on a
- * page of their own.
+ * Picks the one question each key change shows: about the key change's main
+ * class if possible, else another class it draws; one that names a method the
+ * key change mentions wins, then worries before asks before likes. Each
+ * question is shown once; the rest go to the books' page.
  */
-function assignNotes(lenses: LensReport | null, stops: Story["stops"]): { byStop: Note[][]; rest: Note[] } {
-  const byStop: Note[][] = stops.map(() => []);
-  const rest: Note[] = [];
-  if (!lenses) return { byStop, rest };
+function pickQuestions(lenses: LensReport | null, stops: Story["stops"]): { byStop: (Note | null)[]; rest: Note[] } {
+  const all: Note[] = (lenses?.lenses ?? []).flatMap((l) => l.questions.map((q) => ({ lens: l.lens, q })));
+  const used = new Set<Note>();
   const same = (a: string, n: string) => a === n || a.endsWith(`::${n}`);
   const rank = { worries: 0, asks: 1, likes: 2 } as const;
-  for (const l of lenses.lenses) {
-    for (const q of l.questions) {
-      const [n, method] = q.target?.name.split(/[#.]/) ?? [];
-      // Among key changes about the same class, prefer the one whose text names the method.
-      const pick = (ok: (s: Story["stops"][number]) => boolean) => {
-        const hits = stops.map((s, k) => (ok(s) ? k : -1)).filter((k) => k >= 0);
-        const named = method ? hits.find((k) => `${stops[k].title} ${stops[k].explain} ${stops[k].look}`.includes(method)) : undefined;
-        return named ?? hits[0] ?? -1;
-      };
-      let home = n ? pick((s) => same(s.classes[0], n)) : -1;
-      if (home < 0 && n) home = pick((s) => s.classes.some((k) => same(k, n)));
-      (home >= 0 ? byStop[home] : rest).push({ lens: l.lens, q });
-    }
-  }
-  for (const list of [...byStop, rest]) list.sort((a, b) => rank[a.q.tone] - rank[b.q.tone]);
+  const byStop = stops.map((s) => {
+    const text = `${s.title} ${s.explain} ${s.look}`;
+    const score = (n: Note) => {
+      const [cls, method] = n.q.target?.name.split(/[#.]/) ?? [];
+      if (!cls) return -1;
+      const main = same(s.classes[0], cls);
+      if (!main && !s.classes.some((k) => same(k, cls))) return -1;
+      return (main ? 20 : 10) + (method && text.includes(method) ? 5 : 0) + (2 - rank[n.q.tone]);
+    };
+    const best = all.filter((n) => !used.has(n) && score(n) >= 0).sort((x, y) => score(y) - score(x))[0] ?? null;
+    if (best) used.add(best);
+    return best;
+  });
+  const rest = all.filter((n) => !used.has(n)).sort((a, b) => rank[a.q.tone] - rank[b.q.tone]);
   return { byStop, rest };
 }
 
-/** The lens notes, each with a way to the code it is about. */
-function LensNotes({ comparison, notes, title, onOpen }: { comparison: Comparison; notes: Note[]; title?: string; onOpen(name: string, tab?: PanelTab): void }) {
-  if (!notes.length) return null;
+/** The books' overall take on the whole change, where they disagree, and every other question. */
+function BooksPage({
+  comparison,
+  lenses,
+  rest,
+  onOpen,
+  onAsk,
+  onBack,
+}: {
+  comparison: Comparison;
+  lenses: LensReport | null;
+  rest: Note[];
+  onOpen(name: string, tab?: PanelTab): void;
+  onAsk(): void;
+  onBack(): void;
+}) {
+  const results = (["metz", "ousterhout", "copeland"] as LensId[]).map((id) => ({ id, r: lenses?.lenses.find((l) => l.lens === id) }));
+  const ran = lenses && lenses.status !== "idle";
   return (
-    <div className="stop-lenses">
-      {title && <div className="kicker">{title}</div>}
-      {notes.map((n, j) => (
-        <LensNote key={j} comparison={comparison} note={n} onOpen={onOpen} />
-      ))}
-    </div>
+    <article className="stop" key="books">
+      <div className="stop-meta">After the key changes</div>
+      <h2 className="stop-heading">What the books think</h2>
+      <p className="stop-explain">
+        Three books on code design each read the whole change. They often agree, but not always, and they argue only from checklists built from their books.
+      </p>
+      {!ran ? (
+        <div className="books-empty">
+          <p>The books have not read this change yet.</p>
+          <button className="btn primary" onClick={onAsk}>
+            Ask the books
+          </button>
+        </div>
+      ) : lenses.status === "running" ? (
+        <p className="stop-explain">
+          <span className="spinner small" /> The books are reading the change.
+        </p>
+      ) : (
+        <>
+          <div className="books">
+            {results.map(({ id, r }) => (
+              <section key={id} className="book">
+                <div className="book-head">
+                  <span className={`avatar ${id}`}>{LENS_INFO[id].initials}</span>
+                  <div>
+                    <div className="book-who">{LENS_INFO[id].who}</div>
+                    <div className="book-title">{LENS_INFO[id].book}</div>
+                  </div>
+                </div>
+                <p className="book-take">
+                  {r?.overall ??
+                    (r?.questions[0]?.text ? `${r.questions[0].text}` : r?.error ? "This book could not read the change." : "No take yet.")}
+                </p>
+              </section>
+            ))}
+          </div>
+          {!results.some(({ r }) => r?.overall) && (
+            <p className="rail-note">
+              These notes were written before the books gave an overall take.{" "}
+              <button className="linkish" onClick={onAsk}>
+                Ask the books again
+              </button>
+            </p>
+          )}
+          {lenses.disagreements.length > 0 && (
+            <div className="stop-lenses">
+              <div className="kicker">Where they disagree</div>
+              {lenses.disagreements.map((d, j) => (
+                <div key={j} className="stop-lens disagree">
+                  <p className="topic">{d.topic}</p>
+                  {(Object.entries(d.positions) as [LensId, string][]).map(([id, pos]) => (
+                    <div key={id} className="position">
+                      <b>{LENS_INFO[id].who.split(" ").pop()}:</b> {pos}
+                    </div>
+                  ))}
+                  <div className="tradeoff">{d.tradeoff}</div>
+                </div>
+              ))}
+            </div>
+          )}
+          {rest.length > 0 && (
+            <details className="all-questions">
+              <summary>
+                {rest.length} more question{rest.length === 1 ? "" : "s"} from the books
+              </summary>
+              <div className="stop-lenses">
+                {rest.map((n, j) => (
+                  <LensNote key={j} comparison={comparison} note={n} onOpen={onOpen} />
+                ))}
+              </div>
+            </details>
+          )}
+        </>
+      )}
+      <footer className="stop-foot">
+        <button className="btn" onClick={onBack}>
+          ← Back
+        </button>
+      </footer>
+    </article>
   );
 }
 
@@ -340,6 +431,15 @@ function HowToRead() {
         <span>Filled teal is a new class; a teal outline is one that changed. Click any box for its details.</span>
       </div>
     </details>
+  );
+}
+
+function BookIcon() {
+  return (
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
+      <path d="M4 5a2 2 0 0 1 2-2h13v16H6a2 2 0 0 0-2 2z" />
+      <path d="M4 19V5" />
+    </svg>
   );
 }
 

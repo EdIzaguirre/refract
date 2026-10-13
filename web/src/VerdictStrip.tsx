@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import type { Comparison, Delta } from "../../src/shared/types";
 import type { Mode, Screen } from "./App";
 
@@ -40,29 +41,18 @@ export function VerdictStrip({
           Refract
         </div>
         {c && (
-          <div className="refs">
+          <div className="refs" title={`${c.base.short} → ${c.head.short}: ${c.head.subject}\n${c.stats.files} files changed, +${c.stats.additions} −${c.stats.deletions}`}>
             <span>{c.repo.name}</span>
-            <span>·</span>
-            <b>{c.base.short}</b>
-            <span>→</span>
-            <b>{c.head.short}</b>
-            <span className="subject" title={c.head.subject}>
-              {c.head.subject}
-            </span>
-            <span>
-              · {c.stats.files} files · +{c.stats.additions} −{c.stats.deletions}
-            </span>
+            <b>
+              {watching && <span className="live-dot" title={`Watching ${watching} for new commits`} />}
+              {refName(c.head)}
+            </b>
+            <span>vs</span>
+            <b>{refName(c.base)}</b>
           </div>
         )}
         <div className="spacer" />
-        {watching && (
-          <span className="status" title={status}>
-            <span className="live-dot" /> watching <b>{watching}</b>
-          </span>
-        )}
-        <span className="status" title={status}>
-          {status}
-        </span>
+        <StatusNote status={status} />
         <div className="seg views" role="group" aria-label="View">
           {(["tour", "explore"] as Screen[]).map((v) => (
             <button key={v} aria-pressed={screen === v} onClick={() => onScreen(v)} title={v === "tour" ? "The key changes, explained (t)" : "The whole zoomable map, commit by commit (e)"}>
@@ -104,5 +94,30 @@ export function VerdictStrip({
         </>
       )}
     </header>
+  );
+}
+
+/** A branch name reads better than a SHA; fall back to the short SHA when the ref is one. */
+function refName(r: Comparison["head"]): string {
+  return !r.ref || /^[0-9a-f]{7,40}$/i.test(r.ref) || r.ref === "HEAD" ? r.short : r.ref.replace(/^origin\//, "");
+}
+
+/**
+ * What Refract is doing, shown briefly when it changes and then folded into
+ * a dot; the full message stays on hover.
+ */
+function StatusNote({ status }: { status: string }) {
+  const [fresh, setFresh] = useState(true);
+  useEffect(() => {
+    setFresh(true);
+    const t = setTimeout(() => setFresh(false), 6000);
+    return () => clearTimeout(t);
+  }, [status]);
+  if (!status) return null;
+  return (
+    <span className={`status ${fresh ? "fresh" : "quiet"}`} title={status}>
+      <span className="status-dot" />
+      {fresh && <span className="status-text">{status}</span>}
+    </span>
   );
 }

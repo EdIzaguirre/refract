@@ -146,7 +146,7 @@ function storyPrompt(facts: object, diff: string, lensQuestions: string[]): stri
 
 Write:
 - summary: one plain sentence saying what the change does, the way a colleague would say it out loud. Name the main classes. No numbers unless one is the point.
-- stops: 3 to 5 stops, most important first. Each stop is one part of the story:
+- stops: 3 to 5 stops, most important first. Each stop is one part of the story, and the stops must not overlap: a class can be the main class of only one stop. When a new or changed class has both an upside and an open question (say, it pulls logic into one place but may now do two jobs), tell both in that class's one stop rather than splitting them into two. Each stop is one part of the story:
   - title: a short headline in plain words (under 60 characters), like "Invitation sending moved into one service".
   - explain: two or three short sentences. What was true before, what is true now, and why a reader should care. Use the measurements; quote a number only when it helps.
   - look: one sentence telling the reader what to look at in the drawing. The drawing shows the classes as boxes before and after side by side. A box's width is its public interface; its height is its code. Arrows are dependencies: green arrows are new, dashed red arrows were removed, grey arrows did not change. Boxes that are new appear only on the after side.

@@ -274,6 +274,8 @@ export interface LensQuestion {
 
 export interface LensResult {
   lens: LensId;
+  /** Two or three sentences: how this book judges the change as a whole. */
+  overall?: string;
   questions: LensQuestion[];
   error?: string;
 }

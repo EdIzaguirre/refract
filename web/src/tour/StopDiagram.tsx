@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import ELK, { type ElkExtendedEdge } from "elkjs/lib/elk.bundled.js";
-import type { ClassChange, Comparison, EdgeChange, Shape } from "../../../src/shared/types";
+import type { ClassChange, Comparison, EdgeChange, Role, Shape } from "../../../src/shared/types";
 import { boxDims, splinePath } from "../map/layout";
 
 /**
@@ -21,6 +21,33 @@ function dims(shape: Shape | null): { w: number; h: number } | null {
 const LABEL_TOP = 30;
 const LABEL_BOTTOM = 22;
 const PAD = 24;
+/** Room above the drawing for the layer headings. */
+const HEAD = 26;
+
+/**
+ * Rails layers, left to right: what handles a request, what does the work,
+ * what holds the data. Where a box sits says what kind of class it is.
+ */
+const LAYERS: { title: string; roles: Role[] }[] = [
+  { title: "Controllers", roles: ["controller", "component", "helper"] },
+  { title: "Services and jobs", roles: ["service", "job", "mailer", "policy", "lib", "other"] },
+  { title: "Models", roles: ["model", "concern"] },
+];
+const layerOf = (r: Role) => Math.max(0, LAYERS.findIndex((l) => l.roles.includes(r)));
+
+export const ROLE_WORD: Record<Role, string> = {
+  model: "model",
+  controller: "controller",
+  service: "service",
+  job: "job",
+  mailer: "mailer",
+  helper: "helper",
+  concern: "concern",
+  policy: "policy",
+  component: "component",
+  lib: "library",
+  other: "class",
+};
 
 interface Placed {
   change: ClassChange;
@@ -40,6 +67,8 @@ interface Drawing {
   height: number;
   nodes: Placed[];
   edges: Routed[];
+  /** Headings over each Rails layer the drawing uses, centred on its column. */
+  layers: { title: string; x: number }[];
 }
 
 const elk = new ELK();
@@ -51,7 +80,12 @@ async function layout(c: Comparison, names: string[]): Promise<Drawing> {
   const size = (k: ClassChange) => {
     const b = dims(k.shape.before);
     const a = dims(k.shape.after);
-    const label = Math.max(shortName(k.name).length * 8, 90);
+    // Room for the name and for the "service · 113 lines (+76) · 7 public" line under the box.
+    const nums = Math.max(
+      k.shape.before ? `${ROLE_WORD[k.role]} · ${numbers(k.shape.before, null)}`.length : 0,
+      k.shape.after ? `${ROLE_WORD[k.role]} · ${numbers(k.shape.after, k.shape.before)}`.length : 0,
+    );
+    const label = Math.max(shortName(k.name).length * 8, nums * 6.4 + 8, 90);
     return { w: Math.max(b?.w ?? 0, a?.w ?? 0, label), h: Math.max(b?.h ?? 0, a?.h ?? 0) + LABEL_TOP + LABEL_BOTTOM };
   };
   const graph = await elk.layout({
@@ -65,23 +99,37 @@ async function layout(c: Comparison, names: string[]): Promise<Drawing> {
       "elk.edgeRouting": "SPLINES",
       "elk.layered.considerModelOrder.strategy": "NODES_AND_EDGES",
       "elk.aspectRatio": "0.8",
+      // Columns by Rails layer, so a backwards arrow (a model reaching into a service) stands out.
+      "elk.partitioning.activate": "true",
     },
-    children: classes.map((k) => ({ id: k.name, width: size(k).w, height: size(k).h })),
+    children: classes.map((k) => ({
+      id: k.name,
+      width: size(k).w,
+      height: size(k).h,
+      layoutOptions: { "elk.partitioning.partition": String(layerOf(k.role)) },
+    })),
     edges: edges.map((e, i) => ({ id: `e${i}`, sources: [e.from], targets: [e.to], e }) as ElkExtendedEdge & { e: EdgeChange }),
   });
   const nodes = (graph.children ?? []).map((n) => ({
     change: classes.find((k) => k.name === n.id)!,
     x: n.x! + PAD,
-    y: n.y! + PAD,
+    y: n.y! + PAD + HEAD,
     w: n.width!,
     h: n.height!,
   }));
   const routed = ((graph.edges ?? []) as (ElkExtendedEdge & { e: EdgeChange })[]).flatMap((ge) => {
     const s = ge.sections?.[0];
     if (!s) return [];
-    return [{ edge: ge.e, path: splinePath([s.startPoint, ...(s.bendPoints ?? []), s.endPoint].map((p) => ({ x: p.x + PAD, y: p.y + PAD }))) }];
+    return [{ edge: ge.e, path: splinePath([s.startPoint, ...(s.bendPoints ?? []), s.endPoint].map((p) => ({ x: p.x + PAD, y: p.y + PAD + HEAD }))) }];
   });
-  return { width: (graph.width ?? 0) + PAD * 2, height: (graph.height ?? 0) + PAD * 2, nodes, edges: routed };
+  const layers = LAYERS.flatMap((l, i) => {
+    const inLayer = nodes.filter((n) => layerOf(n.change.role) === i);
+    if (!inLayer.length) return [];
+    const x0 = Math.min(...inLayer.map((n) => n.x));
+    const x1 = Math.max(...inLayer.map((n) => n.x + n.w));
+    return [{ title: l.title, x: (x0 + x1) / 2 }];
+  });
+  return { width: (graph.width ?? 0) + PAD * 2, height: (graph.height ?? 0) + PAD * 2 + HEAD, nodes, edges: routed, layers };
 }
 
 export const shortName = (name: string) => name.split("::").pop() ?? name;
@@ -124,6 +172,11 @@ function Pane({ drawing, side, onOpen }: { drawing: Drawing; side: "before" | "a
           </marker>
         ))}
       </defs>
+      {drawing.layers.map((l) => (
+        <text key={l.title} className="fig-layer" x={l.x} y={16} textAnchor="middle">
+          {l.title}
+        </text>
+      ))}
       {drawing.edges.map((r, i) => {
         const present = side === "before" ? r.edge.before > 0 : r.edge.after > 0;
         if (!present) return null;
@@ -170,7 +223,7 @@ function Box({ node, side, onOpen }: { node: Placed; side: "before" | "after"; o
       </text>
       <rect x={cx - d.w / 2} y={node.y + LABEL_TOP} width={d.w} height={d.h} rx={4} />
       <text className="fig-nums" x={cx} y={node.y + LABEL_TOP + d.h + 16} textAnchor="middle">
-        {numbers(shape, side === "after" ? k.shape.before : null)}
+        {ROLE_WORD[k.role]} · {numbers(shape, side === "after" ? k.shape.before : null)}
       </text>
     </g>
   );

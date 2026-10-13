@@ -285,6 +285,7 @@ export function App() {
               onStop={setStop}
               onOpen={openInExplore}
               onTell={() => head && api.tellStory(head).then(setStory)}
+              onAskBooks={() => head && api.runLenses(head).then(setLenses)}
             />
           ) : (
             <div className="loading">

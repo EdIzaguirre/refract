@@ -23,6 +23,7 @@ const target = {
 const LENS_SCHEMA = {
   type: "object",
   properties: {
+    overall: { type: "string" },
     questions: {
       type: "array",
       items: {
@@ -39,7 +40,7 @@ const LENS_SCHEMA = {
       },
     },
   },
-  required: ["questions"],
+  required: ["overall", "questions"],
 };
 
 const DISAGREE_SCHEMA = {
@@ -128,7 +129,9 @@ Argue only from the checklist below. It was built from the book with quotes chec
 
 The measurements below come from parsing the code at both commits. Treat them as facts. Every question you write must point at something specific in the measurements or the diff, and its evidence must say what was measured or seen.
 
-Write 2 to 5 items. Each is either something the book would like about this change ("likes") or a pointed question it would ask ("asks"), or a real concern ("worries"). Lead with what matters most. Do not give scores. Questions should be answerable: name the class or method and say what would change the answer. Plain, direct sentences; no hedging filler; no em dashes. Put the class (or area, or "Class#method") the item is about in target, using names exactly as they appear in the measurements. Use "Class#method" (or "Class.method" for a class method) whenever the item is about a specific method, so the reader can jump straight to that code.
+First write overall: two or three plain sentences on how this book would judge the change as a whole, the way its author might sum it up to a colleague. Name the one or two things that matter most to this book, good or bad. No quotes and no rule numbers here.
+
+Then write 2 to 5 items. Each is either something the book would like about this change ("likes") or a pointed question it would ask ("asks"), or a real concern ("worries"). Lead with what matters most. Do not give scores. Questions should be answerable: name the class or method and say what would change the answer. Plain, direct sentences; no hedging filler; no em dashes. Put the class (or area, or "Class#method") the item is about in target, using names exactly as they appear in the measurements. Use "Class#method" (or "Class.method" for a class method) whenever the item is about a specific method, so the reader can jump straight to that code.
 
 The book treats its rules as guidelines, so phrase hits as questions about the cost of change, not as failures.
 
@@ -194,10 +197,10 @@ export async function runLenses(
       try {
         log(`Asking the ${lens.who} lens…`);
         const checklist = await fs.readFile(path.join(LENS_DIR, lens.file), "utf8");
-        const out = await askClaude<{ questions: LensQuestion[] }>(lensPrompt(lens, checklist, facts, diff), LENS_SCHEMA, {
+        const out = await askClaude<{ overall?: string; questions: LensQuestion[] }>(lensPrompt(lens, checklist, facts, diff), LENS_SCHEMA, {
           cwd: ws.git.root,
         });
-        const result: LensResult = { lens: lens.id, questions: out.questions ?? [] };
+        const result: LensResult = { lens: lens.id, overall: out.overall, questions: out.questions ?? [] };
         report.lenses = [...report.lenses.filter((l) => l.lens !== lens.id), result];
         onProgress({ ...report });
         log(`${lens.who}: ${result.questions.length} items`);
