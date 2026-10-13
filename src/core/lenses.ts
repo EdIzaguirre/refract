@@ -106,7 +106,7 @@ export function factsFor(c: Comparison) {
 }
 
 /** The real diff of application code, trimmed so a prompt stays readable. */
-async function diffFor(ws: Workspace, c: Comparison, budget = 90_000): Promise<string> {
+export async function diffFor(ws: Workspace, c: Comparison, budget = 90_000): Promise<string> {
   const app = c.files.filter((f) => f.kind === "app").sort((a, b) => b.additions + b.deletions - (a.additions + a.deletions));
   let out = "";
   for (const f of app) {

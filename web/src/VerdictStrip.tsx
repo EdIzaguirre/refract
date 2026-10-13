@@ -1,5 +1,5 @@
 import type { Comparison, Delta } from "../../src/shared/types";
-import type { Mode } from "./App";
+import type { Mode, Screen } from "./App";
 
 export function Logo() {
   return (
@@ -17,6 +17,8 @@ export function VerdictStrip({
   comparison: c,
   mode,
   onMode,
+  screen,
+  onScreen,
   status,
   watching,
   onDelta,
@@ -24,6 +26,8 @@ export function VerdictStrip({
   comparison: Comparison | null;
   mode: Mode;
   onMode(m: Mode): void;
+  screen: Screen;
+  onScreen(s: Screen): void;
   status: string;
   watching: string | null;
   onDelta(t?: Delta["target"]): void;
@@ -59,6 +63,14 @@ export function VerdictStrip({
         <span className="status" title={status}>
           {status}
         </span>
+        <div className="seg views" role="group" aria-label="View">
+          {(["tour", "explore"] as Screen[]).map((v) => (
+            <button key={v} aria-pressed={screen === v} onClick={() => onScreen(v)} title={v === "tour" ? "The change told in a few stops (t)" : "The whole zoomable map (e)"}>
+              {v === "tour" ? "Tour" : "Explore"}
+            </button>
+          ))}
+        </div>
+        {screen === "explore" && (
         <div className="seg" role="group" aria-label="Before or after">
           {(["before", "after", "split"] as Mode[]).map((m) => (
             <button key={m} aria-pressed={mode === m} onClick={() => onMode(m)}>
@@ -67,8 +79,9 @@ export function VerdictStrip({
             </button>
           ))}
         </div>
+        )}
       </div>
-      {c && (
+      {c && screen === "explore" && (
         <>
           <div className="verdict-line">
             <span className={`verdict-label ${c.verdict.tone}`}>{c.verdict.label}</span>

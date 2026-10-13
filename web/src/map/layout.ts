@@ -312,7 +312,7 @@ export async function layoutMap(c: Comparison): Promise<MapLayout> {
   return { width, height, areas, classes, edges, areaLinks };
 }
 
-function splinePath(pts: { x: number; y: number }[]): string {
+export function splinePath(pts: { x: number; y: number }[]): string {
   if (pts.length < 2) return "";
   if (pts.length === 2) return `M${pts[0].x},${pts[0].y}L${pts[1].x},${pts[1].y}`;
   // ELK spline sections come as start, control points, end.

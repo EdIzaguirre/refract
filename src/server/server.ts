@@ -4,10 +4,11 @@ import { existsSync } from "node:fs";
 import path from "node:path";
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
-import type { Comparison, FlowReport, LensReport, ServerEvent, Timeline } from "../shared/types.js";
+import type { Comparison, FlowReport, LensReport, ServerEvent, Story, Timeline } from "../shared/types.js";
 import { cachedLenses, runLenses } from "../core/lenses.js";
 import { cachedFlows, sequenceFor, traceFlows } from "../core/flows.js";
 import { draftAreas } from "../core/draft-areas.js";
+import { cachedStory, measuredStory, writeStory } from "../core/story.js";
 import type { Workspace } from "../core/workspace.js";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -76,6 +77,7 @@ class LiveState {
   private lenses = new Map<string, LensReport>();
   private flows = new Map<string, Promise<FlowReport>>();
   private lensedHeads = new Set<string>();
+  private stories = new Map<string, Story>();
   private drafting = false;
 
   constructor(
@@ -92,6 +94,7 @@ class LiveState {
     this.setStatus(`Measuring ${this.commits.length} commit${this.commits.length === 1 ? "" : "s"}`);
     await this.compare(this.head);
     this.setStatus("Ready");
+    void this.tellStory(this.head);
     this.maybeDraftAreas();
   }
 
@@ -151,6 +154,39 @@ class LiveState {
     return this.lenses.get(key)!;
   }
 
+  /** The tour for a commit: Claude's when written, else the measured one. */
+  async story(head: string): Promise<Story> {
+    const key = `${this.base}:${head}`;
+    const mem = this.stories.get(key);
+    if (mem) return mem;
+    const c = await this.compare(head);
+    const cached = await cachedStory(this.ws, c);
+    if (cached) {
+      this.stories.set(key, cached);
+      return cached;
+    }
+    return measuredStory(c);
+  }
+
+  /** Asks Claude Code to tell the change; the page shows the measured tour meanwhile. */
+  async tellStory(head: string): Promise<Story> {
+    const key = `${this.base}:${head}`;
+    const existing = await this.story(head);
+    if (existing.source === "claude" || existing.status === "running" || process.env.REFRACT_NO_STORY) return existing;
+    const c = await this.compare(head);
+    const running: Story = { ...existing, status: "running" };
+    this.stories.set(key, running);
+    this.broadcast({ type: "story", payload: running });
+    const lens = await this.lensReport(head);
+    const questions = lens.lenses.flatMap((l) => l.questions.map((q) => `${l.lens} ${q.tone}: ${q.text}`));
+    writeStory(this.ws, c, questions).then((s) => {
+      if (s.error) this.setStatus(`Claude Code could not write the tour, showing the measured one: ${s.error.slice(0, 160)}`);
+      this.stories.set(key, s);
+      this.broadcast({ type: "story", payload: s });
+    });
+    return running;
+  }
+
   private autoLenses() {
     if (!this.watching || this.lensedHeads.has(this.head)) return;
     if (Date.now() - this.lastCommitAt < this.opts.quietSeconds * 1000) return;
@@ -162,6 +198,7 @@ class LiveState {
         this.setStatus(`${this.watching} has been quiet for ${q >= 120 ? `${Math.round(q / 60)} minutes` : `${q} seconds`}; asking the lenses`);
         void this.runLenses(this.head);
       }
+      void this.tellStory(this.head);
     });
   }
 
@@ -213,6 +250,7 @@ class LiveState {
 
   async refreshAll(message: string) {
     this.comparisons.clear();
+    this.stories.clear();
     const c = await this.compare(this.head);
     this.broadcast({ type: "comparison", payload: c });
     this.setStatus(message);
@@ -260,6 +298,7 @@ async function route(live: LiveState, req: http.IncomingMessage, res: http.Serve
         head: live.head,
         comparison: await live.compare(h),
         lenses: await live.lensReport(h),
+        story: await live.story(h),
         status: live.status,
         areasPath: live.ws.areasPath,
       });
@@ -269,6 +308,10 @@ async function route(live: LiveState, req: http.IncomingMessage, res: http.Serve
     case "/api/lenses": {
       const h = await head();
       return json(req.method === "POST" ? await live.runLenses(h) : await live.lensReport(h));
+    }
+    case "/api/story": {
+      const h = await head();
+      return json(req.method === "POST" ? await live.tellStory(h) : await live.story(h));
     }
     case "/api/diff": {
       const h = await head();

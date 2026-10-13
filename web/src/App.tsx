@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { Comparison, LensReport, ServerEvent, Timeline } from "../../src/shared/types";
+import type { Comparison, LensReport, ServerEvent, Story, Timeline } from "../../src/shared/types";
 import { api, useEvents } from "./api";
 import { layoutMap, type MapLayout } from "./map/layout";
 import { MapView, type MapHandle } from "./map/MapView";
@@ -8,8 +8,10 @@ import { LensRail } from "./LensRail";
 import { TimelineBar } from "./TimelineBar";
 import { ClassPanel, type PanelTab } from "./ClassPanel";
 import { Legend, Crumbs } from "./MapChrome";
+import { Tour } from "./tour/Tour";
 
 export type Mode = "before" | "after" | "split";
+export type Screen = "tour" | "explore";
 
 export function App() {
   const [timeline, setTimeline] = useState<Timeline | null>(null);
@@ -17,6 +19,9 @@ export function App() {
   const [head, setHead] = useState<string | null>(null);
   const [comparison, setComparison] = useState<Comparison | null>(null);
   const [lenses, setLenses] = useState<LensReport | null>(null);
+  const [story, setStory] = useState<Story | null>(null);
+  const [screen, setScreen] = useState<Screen>(() => (new URLSearchParams(location.search).get("view") === "explore" ? "explore" : "tour"));
+  const [stop, setStop] = useState(0);
   const [layout, setLayout] = useState<MapLayout | null>(null);
   const [status, setStatus] = useState("Loading");
   const [error, setError] = useState<string | null>(null);
@@ -41,6 +46,7 @@ export function App() {
         setHead(s.head);
         setComparison(s.comparison);
         setLenses(s.lenses);
+        setStory(s.story);
         setStatus(s.status);
         setAreasPath(s.areasPath);
       })
@@ -58,6 +64,7 @@ export function App() {
       setStatus("Ready");
     });
     api.lenses(head).then((l) => !stale && setLenses(l));
+    api.story(head).then((st) => !stale && setStory(st));
     return () => {
       stale = true;
     };
@@ -95,6 +102,11 @@ export function App() {
       case "comparison": {
         const c = e.payload as Comparison;
         if (c.head.sha === head || (following.current && c.head.sha === liveHead)) setComparison(c);
+        break;
+      }
+      case "story": {
+        const st = e.payload as Story;
+        if (st.head === head) setStory(st);
         break;
       }
       case "lenses": {
@@ -169,7 +181,15 @@ export function App() {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if ((e.target as HTMLElement).closest("input, textarea")) return;
-      if (e.key === " " || e.key === "b") {
+      if (screen === "tour") {
+        const n = story?.stops.length ?? 0;
+        if (e.key === "ArrowRight" && stop < n - 1) setStop(stop + 1);
+        else if (e.key === "ArrowLeft" && stop > 0) setStop(stop - 1);
+        else if (e.key === "e") setScreen("explore");
+        return;
+      }
+      if (e.key === "t") setScreen("tour");
+      else if (e.key === " " || e.key === "b") {
         e.preventDefault();
         changeMode(mode === "after" ? "before" : "after");
       } else if (e.key === "s") changeMode(mode === "split" ? "after" : "split");
@@ -183,7 +203,24 @@ export function App() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [mode, changeMode, timeline, head, pickHead]);
+  }, [mode, changeMode, timeline, head, pickHead, screen, story, stop]);
+
+  // A new story starts the tour from its first stop.
+  useEffect(() => setStop(0), [story?.head, story?.source]);
+
+  // Opening a class from the tour switches to the map and flies to it once the map is drawn.
+  const pending = useRef<string | null>(null);
+  const openInExplore = useCallback((name: string) => {
+    pending.current = name;
+    setScreen("explore");
+  }, []);
+  useEffect(() => {
+    if (screen !== "explore" || !layout || !pending.current) return;
+    const name = pending.current;
+    pending.current = null;
+    const t = setTimeout(() => select(name, true), 60);
+    return () => clearTimeout(t);
+  }, [screen, layout, select]);
 
   const selectedChange = useMemo(() => comparison?.classes.find((c) => c.name === selected) ?? null, [comparison, selected]);
 
@@ -200,7 +237,40 @@ export function App() {
 
   return (
     <div className="app">
-      <VerdictStrip comparison={comparison} mode={mode} onMode={changeMode} status={status} watching={timeline?.watching ?? null} onDelta={goTo} />
+      <VerdictStrip
+        comparison={comparison}
+        mode={mode}
+        onMode={changeMode}
+        screen={screen}
+        onScreen={setScreen}
+        status={status}
+        watching={timeline?.watching ?? null}
+        onDelta={goTo}
+      />
+      {screen === "tour" ? (
+        <div className="main tour-main">
+          {comparison ? (
+            <Tour
+              comparison={comparison}
+              story={story}
+              lenses={lenses}
+              stop={stop}
+              onStop={setStop}
+              onOpen={openInExplore}
+              onTell={() => head && api.tellStory(head).then(setStory)}
+            />
+          ) : (
+            <div className="loading">
+              <div>
+                <div className="big">Measuring the change</div>
+                <p>{status}</p>
+                <span className="spinner" />
+              </div>
+            </div>
+          )}
+          {toast && <div className="toast">{toast}</div>}
+        </div>
+      ) : (
       <div className="main">
         <div className="stage" ref={stage}>
           {layout && comparison ? (
@@ -262,6 +332,7 @@ export function App() {
         </div>
         <LensRail report={lenses} comparison={comparison} onRun={() => head && api.runLenses(head).then(setLenses)} onTarget={goTo} />
       </div>
+      )}
       <TimelineBar timeline={timeline} head={head} liveHead={liveHead} fresh={fresh} onPick={pickHead} />
     </div>
   );

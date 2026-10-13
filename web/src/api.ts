@@ -1,11 +1,12 @@
 import { useEffect, useRef } from "react";
-import type { Comparison, LensReport, Sequence, ServerEvent, Timeline } from "../../src/shared/types";
+import type { Comparison, LensReport, Sequence, ServerEvent, Story, Timeline } from "../../src/shared/types";
 
 export interface AppState {
   timeline: Timeline;
   head: string;
   comparison: Comparison;
   lenses: LensReport;
+  story: Story;
   status: string;
   areasPath: string;
 }
@@ -31,6 +32,8 @@ export const api = {
   compare: (head: string) => get<Comparison>(`/api/compare?${q({ head })}`),
   lenses: (head: string) => get<LensReport>(`/api/lenses?${q({ head })}`),
   runLenses: (head: string) => get<LensReport>(`/api/lenses?${q({ head })}`, { method: "POST" }),
+  story: (head: string) => get<Story>(`/api/story?${q({ head })}`),
+  tellStory: (head: string) => get<Story>(`/api/story?${q({ head })}`, { method: "POST" }),
   diff: (head: string, paths: string[]) => get<{ diff: string }>(`/api/diff?${q({ head, path: paths })}`),
   sequence: (head: string, side: "before" | "after", cls: string, method: string) =>
     get<Sequence>(`/api/sequence?${q({ head, side, class: cls, method })}`),

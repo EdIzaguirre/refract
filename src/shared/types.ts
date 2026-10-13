@@ -296,6 +296,33 @@ export interface LensReport {
   error?: string;
 }
 
+// ---------- the guided tour ----------
+
+/** One stop on the tour: a part of the change told in plain words, with the few classes it is about. */
+export interface StoryStop {
+  id: string;
+  title: string;
+  /** Two or three plain sentences: what happened and why it matters. */
+  explain: string;
+  /** What to look for in the before/after drawing. */
+  look: string;
+  tone: Tone;
+  /** Classes to draw, exact names from the comparison. The first is the one the stop is about. */
+  classes: string[];
+}
+
+export interface Story {
+  base: string;
+  head: string;
+  /** "claude" when Claude Code wrote it, "measured" when built from the deltas alone. */
+  source: "claude" | "measured";
+  status: "running" | "done";
+  /** One plain sentence on what the change does. */
+  summary: string;
+  stops: StoryStop[];
+  error?: string;
+}
+
 // ---------- request flows ----------
 
 export interface FlowCall {
@@ -340,6 +367,6 @@ export interface Timeline {
 }
 
 export interface ServerEvent {
-  type: "comparison" | "timeline" | "lenses" | "status" | "flows";
+  type: "comparison" | "timeline" | "lenses" | "status" | "flows" | "story";
   payload: unknown;
 }
