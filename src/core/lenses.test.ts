@@ -18,7 +18,7 @@ describe("lenses", () => {
       `#!/usr/bin/env node
 let input = "";
 process.stdin.on("data", (d) => (input += d)).on("end", () => {
-  const out = input.includes("Three design lenses")
+  const out = input.includes("Find the places where they would disagree")
     ? { disagreements: [{ topic: "Receipts", positions: { metz: "likes it", ousterhout: "asks" }, tradeoff: "one place or more classes" }] }
     : { questions: [{ tone: "asks", text: "Who else queues the receipt job?", evidence: "fan-in 2 to 1", source: "2.3.1", target: { kind: "class", name: "Receipts" } }] };
   process.stdout.write(JSON.stringify({ type: "result", is_error: false, result: "", structured_output: out }));
