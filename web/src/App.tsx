@@ -1,0 +1,268 @@
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { Comparison, LensReport, ServerEvent, Timeline } from "../../src/shared/types";
+import { api, useEvents } from "./api";
+import { layoutMap, type MapLayout } from "./map/layout";
+import { MapView, type MapHandle } from "./map/MapView";
+import { VerdictStrip } from "./VerdictStrip";
+import { LensRail } from "./LensRail";
+import { TimelineBar } from "./TimelineBar";
+import { ClassPanel, type PanelTab } from "./ClassPanel";
+import { Legend, Crumbs } from "./MapChrome";
+
+export type Mode = "before" | "after" | "split";
+
+export function App() {
+  const [timeline, setTimeline] = useState<Timeline | null>(null);
+  const [liveHead, setLiveHead] = useState<string | null>(null);
+  const [head, setHead] = useState<string | null>(null);
+  const [comparison, setComparison] = useState<Comparison | null>(null);
+  const [lenses, setLenses] = useState<LensReport | null>(null);
+  const [layout, setLayout] = useState<MapLayout | null>(null);
+  const [status, setStatus] = useState("Loading");
+  const [error, setError] = useState<string | null>(null);
+  const [mode, setMode] = useState<Mode>("after");
+  const [phase, setPhase] = useState(1);
+  const [selected, setSelected] = useState<string | null>(null);
+  const [tab, setTab] = useState<PanelTab>("shape");
+  const [view, setView] = useState<{ k: number; openArea: string | null }>({ k: 1, openArea: null });
+  const [toast, setToast] = useState<string | null>(null);
+  const [fresh, setFresh] = useState<string | null>(null);
+  const [areasPath, setAreasPath] = useState("");
+  const map = useRef<MapHandle>(null);
+  const following = useRef(true);
+
+  // First load.
+  useEffect(() => {
+    api
+      .state()
+      .then((s) => {
+        setTimeline(s.timeline);
+        setLiveHead(s.head);
+        setHead(s.head);
+        setComparison(s.comparison);
+        setLenses(s.lenses);
+        setStatus(s.status);
+        setAreasPath(s.areasPath);
+      })
+      .catch((e: Error) => setError(e.message));
+  }, []);
+
+  // Scrubbing the timeline asks for that commit's comparison.
+  useEffect(() => {
+    if (!head || comparison?.head.sha === head) return;
+    let stale = false;
+    setStatus("Measuring…");
+    api.compare(head).then((c) => {
+      if (stale) return;
+      setComparison(c);
+      setStatus("Ready");
+    });
+    api.lenses(head).then((l) => !stale && setLenses(l));
+    return () => {
+      stale = true;
+    };
+  }, [head, comparison?.head.sha]);
+
+  useEffect(() => {
+    if (!comparison) return;
+    let stale = false;
+    layoutMap(comparison)
+      .then((l) => !stale && setLayout(l))
+      .catch((e: Error) => setError(`Layout failed: ${e.message}`));
+    return () => {
+      stale = true;
+    };
+  }, [comparison]);
+
+  useEvents((e: ServerEvent) => {
+    switch (e.type) {
+      case "status":
+        setStatus((e.payload as { message: string }).message);
+        break;
+      case "timeline": {
+        const t = e.payload as Timeline;
+        setTimeline(t);
+        const latest = t.commits[t.commits.length - 1]?.sha;
+        if (latest) {
+          setLiveHead(latest);
+          setFresh(latest);
+          setTimeout(() => setFresh(null), 1500);
+          if (following.current) setHead(latest);
+          else setToast("A new commit landed. Click the last dot to see it.");
+        }
+        break;
+      }
+      case "comparison": {
+        const c = e.payload as Comparison;
+        if (c.head.sha === head || (following.current && c.head.sha === liveHead)) setComparison(c);
+        break;
+      }
+      case "lenses": {
+        const r = e.payload as LensReport;
+        if (r.head === head) setLenses(r);
+        break;
+      }
+    }
+  });
+
+  useEffect(() => {
+    if (!toast) return;
+    const t = setTimeout(() => setToast(null), 5000);
+    return () => clearTimeout(t);
+  }, [toast]);
+
+  // Flipping before and after animates the map between them.
+  const animateTo = useCallback((target: number) => {
+    const start = performance.now();
+    let from = 0;
+    setPhase((p) => (from = p));
+    const step = (now: number) => {
+      const t = Math.min(1, (now - start) / 650);
+      setPhase(from + (target - from) * t);
+      if (t < 1) requestAnimationFrame(step);
+    };
+    requestAnimationFrame(step);
+  }, []);
+
+  const changeMode = useCallback(
+    (m: Mode) => {
+      setMode(m);
+      if (m === "before") animateTo(0);
+      if (m === "after") animateTo(1);
+    },
+    [animateTo],
+  );
+
+  const stage = useRef<HTMLDivElement>(null);
+  const select = useCallback((name: string | null, fly = false) => {
+    setSelected(name);
+    if (!name) return;
+    // Keep the class in view beside the panel that opens over the map.
+    const w = stage.current?.clientWidth ?? 1200;
+    const panel = Math.min(760, w * 0.62);
+    if (fly) map.current?.flyToClass(name, panel);
+  }, []);
+
+  const goTo = useCallback(
+    (target?: { kind: string; name: string }) => {
+      if (!target || !comparison) return;
+      if (target.kind === "area") {
+        const area = comparison.areas.find((a) => a.id === target.name || a.name === target.name);
+        if (area) map.current?.flyToArea(area.id);
+        return;
+      }
+      const cls = target.name.split(/[#.]/)[0];
+      const found = comparison.classes.find((c) => c.name === cls) ?? comparison.classes.find((c) => c.name.endsWith(`::${cls}`));
+      if (found) select(found.name, true);
+    },
+    [comparison, select],
+  );
+
+  const pickHead = useCallback(
+    (sha: string) => {
+      following.current = sha === liveHead;
+      setHead(sha);
+    },
+    [liveHead],
+  );
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.target as HTMLElement).closest("input, textarea")) return;
+      if (e.key === " " || e.key === "b") {
+        e.preventDefault();
+        changeMode(mode === "after" ? "before" : "after");
+      } else if (e.key === "s") changeMode(mode === "split" ? "after" : "split");
+      else if (e.key === "f") map.current?.fit();
+      else if (e.key === "Escape") setSelected(null);
+      else if ((e.key === "ArrowLeft" || e.key === "ArrowRight") && timeline && head) {
+        const i = timeline.commits.findIndex((c) => c.sha === head);
+        const j = e.key === "ArrowLeft" ? Math.max(0, i - 1) : Math.min(timeline.commits.length - 1, i + 1);
+        if (timeline.commits[j]) pickHead(timeline.commits[j].sha);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [mode, changeMode, timeline, head, pickHead]);
+
+  const selectedChange = useMemo(() => comparison?.classes.find((c) => c.name === selected) ?? null, [comparison, selected]);
+
+  if (error) {
+    return (
+      <div className="loading">
+        <div>
+          <div className="big">Refract could not load this change</div>
+          <p>{error}</p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="app">
+      <VerdictStrip comparison={comparison} mode={mode} onMode={changeMode} status={status} watching={timeline?.watching ?? null} onDelta={goTo} />
+      <div className="main">
+        <div className="stage" ref={stage}>
+          {layout && comparison ? (
+            <>
+              <MapView
+                ref={map}
+                layout={layout}
+                phase={mode === "split" ? 1 : phase}
+                split={mode === "split"}
+                selected={selected}
+                focusArea={selectedChange?.area ?? null}
+                onSelect={(n) => select(n, true)}
+                onView={setView}
+              />
+              <Crumbs
+                comparison={comparison}
+                openArea={view.openArea}
+                selected={selectedChange}
+                tab={tab}
+                onAreas={() => {
+                  setSelected(null);
+                  map.current?.fit();
+                }}
+                onArea={(id) => map.current?.flyToArea(id)}
+                onTab={setTab}
+              />
+              <Legend comparison={comparison} areasPath={areasPath} onDraft={() => api.draftAreas()} />
+              <div className="map-tools">
+                <button title="Fit the whole map (f)" onClick={() => map.current?.fit()}>
+                  <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6">
+                    <path d="M2 6V2h4M10 2h4v4M14 10v4h-4M6 14H2v-4" />
+                  </svg>
+                </button>
+              </div>
+              {selectedChange && (
+                <ClassPanel
+                  key={selectedChange.name}
+                  change={selectedChange}
+                  comparison={comparison}
+                  lenses={lenses}
+                  head={comparison.head.sha}
+                  tab={tab}
+                  onTab={setTab}
+                  onClose={() => setSelected(null)}
+                  onGo={(name) => select(name, true)}
+                />
+              )}
+            </>
+          ) : (
+            <div className="loading">
+              <div>
+                <div className="big">Measuring the change</div>
+                <p>{status}</p>
+                <span className="spinner" />
+              </div>
+            </div>
+          )}
+          {toast && <div className="toast">{toast}</div>}
+        </div>
+        <LensRail report={lenses} comparison={comparison} onRun={() => head && api.runLenses(head).then(setLenses)} onTarget={goTo} />
+      </div>
+      <TimelineBar timeline={timeline} head={head} liveHead={liveHead} fresh={fresh} onPick={pickHead} />
+    </div>
+  );
+}
