@@ -283,7 +283,7 @@ export function App() {
               stop={stop}
               onStop={setStop}
               onOpen={openInExplore}
-              onTell={() => head && api.tellStory(head).then(setStory)}
+              onTell={(again) => head && api.tellStory(head, again).then(setStory)}
               onAskBooks={() => head && api.runLenses(head).then(setLenses)}
             />
           ) : (

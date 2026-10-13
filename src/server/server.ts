@@ -169,10 +169,10 @@ class LiveState {
   }
 
   /** Asks Claude Code to tell the change; the page shows the measured tour meanwhile. */
-  async tellStory(head: string): Promise<Story> {
+  async tellStory(head: string, again = false): Promise<Story> {
     const key = `${this.base}:${head}`;
     const existing = await this.story(head);
-    if (existing.source === "claude" || existing.status === "running" || process.env.REFRACT_NO_STORY) return existing;
+    if ((existing.source === "claude" && !again) || existing.status === "running" || process.env.REFRACT_NO_STORY) return existing;
     const c = await this.compare(head);
     const running: Story = { ...existing, status: "running" };
     this.stories.set(key, running);
@@ -311,7 +311,7 @@ async function route(live: LiveState, req: http.IncomingMessage, res: http.Serve
     }
     case "/api/story": {
       const h = await head();
-      return json(req.method === "POST" ? await live.tellStory(h) : await live.story(h));
+      return json(req.method === "POST" ? await live.tellStory(h, q.get("again") === "1") : await live.story(h));
     }
     case "/api/diff": {
       const h = await head();

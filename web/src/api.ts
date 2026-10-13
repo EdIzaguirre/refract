@@ -34,7 +34,7 @@ export const api = {
   runLenses: (head: string) => get<LensReport>(`/api/lenses?${q({ head })}`, { method: "POST" }),
   source: (commit: string, path: string) => get<{ text: string }>(`/api/source?${q({ commit, path })}`),
   story: (head: string) => get<Story>(`/api/story?${q({ head })}`),
-  tellStory: (head: string) => get<Story>(`/api/story?${q({ head })}`, { method: "POST" }),
+  tellStory: (head: string, again = false) => get<Story>(`/api/story?${q({ head, ...(again ? { again: "1" } : {}) })}`, { method: "POST" }),
   diff: (head: string, paths: string[], context?: number) =>
     get<{ diff: string }>(`/api/diff?${q({ head, path: paths, context: context === undefined ? undefined : String(context) })}`),
   sequence: (head: string, side: "before" | "after", cls: string, method: string) =>

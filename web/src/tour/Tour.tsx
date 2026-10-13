@@ -37,7 +37,7 @@ export function Tour({
   stop: number;
   onStop(i: number): void;
   onOpen(name: string): void;
-  onTell(): void;
+  onTell(again?: boolean): void;
   onAskBooks(): void;
 }) {
   const stops = story?.stops ?? [];
@@ -122,7 +122,7 @@ export function Tour({
               <span className="spinner small" /> Claude Code is writing a plainer version of this summary.
             </>
           ) : story?.source === "claude" || !story ? null : (
-            <button className="linkish" onClick={onTell}>
+            <button className="linkish" onClick={() => onTell()}>
               Ask Claude Code to write this summary
             </button>
           )}
@@ -132,7 +132,10 @@ export function Tour({
             <summary>How this summary was made</summary>
             {story.source === "claude" ? (
               <p>
-                Refract measured every class at the start of the branch and at its newest commit: its size, its public methods and what it depends on. Claude Code read those measurements, the diff and the questions from the three books, then picked the 3 to 5 changes that matter most to the code's structure and wrote each one up, most important first. The drawings come from the measurements, not from Claude.
+                Refract measured every class at the start of the branch and at its newest commit: its size, its public methods and what it depends on. Claude Code read those measurements, the diff and the notes from the three authors, then picked the 3 to 5 changes that matter most to the code's structure and wrote each one up, most important first. The drawings come from the measurements, not from Claude.{" "}
+                <button className="linkish" onClick={() => onTell(true)}>
+                  Write it again
+                </button>
               </p>
             ) : (
               <p>
