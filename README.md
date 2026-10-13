@@ -10,7 +10,7 @@ Ruby and Rails come first. Everything language-specific sits behind one reader i
 
 - **Tour** (the default). Claude Code tells the change as 3 to 5 stops from the measurements, such as "Invitation sending moved into one service". Each stop has two or three plain sentences, a before and after drawing of just its classes with a line on what to look for, and what the lenses asked about those classes. <kbd>←</kbd>/<kbd>→</kbd> step through the stops; click a box, or "Explore … in the map", to jump into the map at that class. Until Claude has written the tour, or without Claude Code, the stops come straight from the measured deltas.
 - **Explore** (<kbd>e</kbd>, and <kbd>t</kbd> back to the tour) is everything below.
-- **Verdict strip.** Base and head, a measured verdict ("Mostly better", "Mixed"…) and the handful of deltas that drove it. Click a delta to fly the map to what it is about.
+- **Verdict strip.** Base and head, a measured verdict and the handful of deltas that drove it. The verdict weighs what got better against what got worse ("Better", "Mostly worse", "Mixed"…) and adds "with questions" when some changes are worth asking about; questions never count as worse. Click a delta to fly the map to what it is about.
 - **The map.**
   1. *Business areas.* Each area is a tile. Changed areas glow; arrows between areas show dependencies, new ones in the accent colour.
   2. *Inside an area.* Zoom in and the tile opens like a city on a map. Every class is an Ousterhout box: **width is its public interface, height is the code behind it**, so deep modules are narrow and tall. Classes the change touched, and their nearest collaborators, are drawn as a dependency graph; the rest of the area is packed below as a small city.

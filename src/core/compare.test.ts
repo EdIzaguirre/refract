@@ -44,6 +44,12 @@ describe("compare on the sample shop", () => {
     expect(c.deltas.find((d) => d.id === "new-classes")!.after).toBe("2");
   });
 
+  it("weighs better against worse, and never counts a question as worse", () => {
+    const { good, bad, ask, label } = c.verdict;
+    expect(good).toBeGreaterThan(bad);
+    expect(label).toBe(bad === 0 ? `Better${ask ? ", with questions" : ""}` : `Mostly better${ask ? ", with questions" : ""}`);
+  });
+
   it("puts new classes in the area of the classes they work with", () => {
     const area = (n: string) => c.classes.find((k) => k.name === n)!.area;
     expect(area("Payments::Gateway")).toBe(area("Checkout"));

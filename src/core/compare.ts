@@ -411,15 +411,16 @@ function judge(deltas: Delta[], classes: ClassChange[]): Comparison["verdict"] {
   const bad = count("bad");
   const ask = count("ask");
   const moved = classes.filter((c) => c.status !== "unchanged").length;
+  // Better against worse decides the word; questions are never counted as worse, they only add "with questions".
   let label: string;
   let tone: Tone;
-  const score = good - bad - ask * 0.5;
+  const q = ask ? ", with questions" : "";
   if (moved === 0) [label, tone] = ["No structural change", "flat"];
   else if (good + bad + ask === 0) [label, tone] = ["Small change", "flat"];
-  else if (score >= 1.5) [label, tone] = ["Mostly better", "good"];
-  else if (score <= -1.5) [label, tone] = ["Mostly worse", "bad"];
-  else if (score > 0) [label, tone] = ["Better, with questions", "ask"];
-  else [label, tone] = ["Mixed", "ask"];
+  else if (good > bad) [label, tone] = [(bad === 0 ? "Better" : "Mostly better") + q, ask ? "ask" : "good"];
+  else if (bad > good) [label, tone] = [(good === 0 ? "Worse" : "Mostly worse") + q, "bad"];
+  else if (good > 0) [label, tone] = ["Mixed" + q, "ask"];
+  else [label, tone] = ["Questions to ask", "ask"];
   const added = classes.filter((c) => c.status === "added").length;
   const removed = classes.filter((c) => c.status === "removed").length;
   const changed = classes.filter((c) => c.status === "changed").length;
