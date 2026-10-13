@@ -1,4 +1,5 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
+import { ClassPanel, type PanelTab } from "../ClassPanel";
 import type { Comparison, LensId, LensQuestion, LensReport, Story } from "../../../src/shared/types";
 import { StopDiagram, shortName } from "./StopDiagram";
 
@@ -32,6 +33,18 @@ export function Tour({
   const stops = story?.stops ?? [];
   const i = Math.min(stop, Math.max(0, stops.length - 1));
   const current = stops[i];
+  // Clicking a box opens that class's panel over the summary, without leaving it.
+  const [modal, setModal] = useState<string | null>(null);
+  const [tab, setTab] = useState<PanelTab>("shape");
+  const modalChange = modal ? (c.classes.find((k) => k.name === modal) ?? null) : null;
+  useEffect(() => {
+    if (!modal) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setModal(null);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [modal]);
   useEffect(() => {
     document.querySelector(".tour-stage")?.scrollTo({ top: 0, behavior: "smooth" });
   }, [i]);
@@ -90,7 +103,14 @@ export function Tour({
             </div>
             <h2 className="stop-heading">{current.title}</h2>
             <p className="stop-explain">{current.explain}</p>
-            <StopDiagram comparison={c} classes={current.classes} onOpen={onOpen} />
+            <StopDiagram
+              comparison={c}
+              classes={current.classes}
+              onOpen={(name) => {
+                setTab("shape");
+                setModal(name);
+              }}
+            />
             <p className="stop-look">
               <EyeIcon /> {current.look}
             </p>
@@ -132,6 +152,26 @@ export function Tour({
           </div>
         )}
       </section>
+      {modalChange && (
+        <div className="modal-back" onClick={(e) => e.target === e.currentTarget && setModal(null)}>
+          <div className="modal" role="dialog" aria-modal="true">
+            <ClassPanel
+              key={modalChange.name}
+              change={modalChange}
+              comparison={c}
+              lenses={lenses}
+              head={c.head.sha}
+              tab={tab}
+              onTab={setTab}
+              onClose={() => setModal(null)}
+              onGo={setModal}
+            />
+            <button className="btn ghost modal-map" onClick={() => onOpen(modalChange.name)}>
+              Show {shortName(modalChange.name)} in the map
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -230,7 +270,7 @@ function HowToRead() {
           <rect x="2" y="2" width="16" height="12" rx="2" className="fig-box-new" />
           <rect x="26" y="2" width="16" height="12" rx="2" className="fig-box-changed" />
         </svg>
-        <span>Filled teal is a new class; a teal outline is one that changed. Click any box to explore it.</span>
+        <span>Filled teal is a new class; a teal outline is one that changed. Click any box for its details.</span>
       </div>
     </details>
   );

@@ -193,6 +193,7 @@ export function App() {
     const onKey = (e: KeyboardEvent) => {
       if ((e.target as HTMLElement).closest("input, textarea")) return;
       if (screen === "tour") {
+        if (document.querySelector(".modal")) return;
         const n = story?.stops.length ?? 0;
         if (e.key === "ArrowRight" && stop < n - 1) setStop(stop + 1);
         else if (e.key === "ArrowLeft" && stop > 0) setStop(stop - 1);

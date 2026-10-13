@@ -159,7 +159,7 @@ function Box({ node, side, onOpen }: { node: Placed; side: "before" | "after"; o
   const space = ns(k.name);
   return (
     <g className={`fig-box ${state}`} onClick={() => onOpen(k.name)}>
-      <title>{`${k.name}: ${shape.interface} public methods, ${shape.codeLines} lines of code. Click to explore it.`}</title>
+      <title>{`${k.name}: ${shape.interface} public methods, ${shape.codeLines} lines of code. Click for its shape, request flow and code.`}</title>
       {space && (
         <text className="fig-ns" x={cx} y={node.y + 10} textAnchor="middle">
           {space}::

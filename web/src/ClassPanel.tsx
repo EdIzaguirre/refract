@@ -237,7 +237,9 @@ function FlowTab({ c, head }: { c: ClassChange; head: string }) {
   const candidates = useMemo(() => {
     const changed = c.methods.filter((m) => m.status !== "unchanged").map((m) => m.name);
     const pub = (unit?.methods ?? []).filter((m) => m.visibility === "public" && m.kind === "def").map((m) => m.name);
-    return [...new Set([...changed.filter((n) => pub.includes(n)), ...changed, ...pub])].slice(0, 14);
+    // The constructor is rarely the interesting request, so it goes last.
+    const all = [...new Set([...changed.filter((n) => pub.includes(n)), ...changed, ...pub])];
+    return [...all.filter((n) => n !== "initialize"), ...all.filter((n) => n === "initialize")].slice(0, 14);
   }, [c, unit]);
   const [method, setMethod] = useState(candidates[0] ?? "");
   const [seqs, setSeqs] = useState<{ before: Sequence | null; after: Sequence | null }>({ before: null, after: null });
