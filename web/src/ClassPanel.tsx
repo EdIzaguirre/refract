@@ -18,6 +18,7 @@ export function ClassPanel({
   onTab,
   onClose,
   onGo,
+  showLenses = true,
 }: {
   change: ClassChange;
   comparison: Comparison;
@@ -27,6 +28,8 @@ export function ClassPanel({
   onTab(t: PanelTab): void;
   onClose(): void;
   onGo(name: string): void;
+  /** Off where the lens notes already live elsewhere on the page, like the summary. */
+  showLenses?: boolean;
 }) {
   const area = comparison.areas.find((a) => a.id === c.area);
   return (
@@ -63,7 +66,7 @@ export function ClassPanel({
         ))}
       </div>
       <div className="panel-body">
-        {tab === "shape" && <ShapeTab c={c} comparison={comparison} lenses={lenses} onGo={onGo} />}
+        {tab === "shape" && <ShapeTab c={c} comparison={comparison} lenses={showLenses ? lenses : null} onGo={onGo} />}
         {tab === "flow" && <FlowTab c={c} head={head} />}
         {tab === "code" && <CodeTab c={c} head={head} />}
       </div>

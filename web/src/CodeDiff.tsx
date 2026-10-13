@@ -4,7 +4,7 @@ import ruby from "highlight.js/lib/languages/ruby";
 
 hljs.registerLanguage("ruby", ruby);
 
-interface Line {
+export interface Line {
   kind: "add" | "del" | "ctx" | "hunk" | "file";
   old?: number;
   new?: number;
@@ -16,6 +16,10 @@ const escape = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").rep
 /** A unified diff with line numbers and Ruby highlighting. */
 export function CodeDiff({ diff }: { diff: string }) {
   const lines = useMemo(() => parse(diff), [diff]);
+  return <DiffLines lines={lines} />;
+}
+
+export function DiffLines({ lines }: { lines: Line[] }) {
   return (
     <div className="diff">
       {lines.map((l, i) =>
@@ -33,7 +37,7 @@ export function CodeDiff({ diff }: { diff: string }) {
   );
 }
 
-function parse(diff: string): Line[] {
+export function parse(diff: string): Line[] {
   const out: Line[] = [];
   let o = 0;
   let n = 0;

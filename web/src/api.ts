@@ -32,9 +32,11 @@ export const api = {
   compare: (head: string) => get<Comparison>(`/api/compare?${q({ head })}`),
   lenses: (head: string) => get<LensReport>(`/api/lenses?${q({ head })}`),
   runLenses: (head: string) => get<LensReport>(`/api/lenses?${q({ head })}`, { method: "POST" }),
+  source: (commit: string, path: string) => get<{ text: string }>(`/api/source?${q({ commit, path })}`),
   story: (head: string) => get<Story>(`/api/story?${q({ head })}`),
   tellStory: (head: string) => get<Story>(`/api/story?${q({ head })}`, { method: "POST" }),
-  diff: (head: string, paths: string[]) => get<{ diff: string }>(`/api/diff?${q({ head, path: paths })}`),
+  diff: (head: string, paths: string[], context?: number) =>
+    get<{ diff: string }>(`/api/diff?${q({ head, path: paths, context: context === undefined ? undefined : String(context) })}`),
   sequence: (head: string, side: "before" | "after", cls: string, method: string) =>
     get<Sequence>(`/api/sequence?${q({ head, side, class: cls, method })}`),
   trace: (head: string, side: "before" | "after") =>

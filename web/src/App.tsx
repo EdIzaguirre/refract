@@ -194,7 +194,7 @@ export function App() {
       if ((e.target as HTMLElement).closest("input, textarea")) return;
       if (screen === "tour") {
         if (document.querySelector(".modal")) return;
-        const n = story?.stops.length ?? 0;
+        const n = document.querySelectorAll(".tour-stops li").length;
         if (e.key === "ArrowRight" && stop < n - 1) setStop(stop + 1);
         else if (e.key === "ArrowLeft" && stop > 0) setStop(stop - 1);
         else if (e.key === "e") setScreen("explore");

@@ -1,7 +1,13 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { ClassPanel, type PanelTab } from "../ClassPanel";
 import type { Comparison, LensId, LensQuestion, LensReport, Story } from "../../../src/shared/types";
 import { StopDiagram, shortName } from "./StopDiagram";
+import { MethodCode, resolveTarget } from "./MethodCode";
+
+interface Note {
+  lens: LensId;
+  q: LensQuestion;
+}
 
 const WHO: Record<LensId, string> = { metz: "Sandi Metz", ousterhout: "John Ousterhout", copeland: "David Bryant Copeland" };
 const TONE_WORD = { good: "Better", bad: "Worse", ask: "A question", flat: "Context" } as const;
@@ -31,8 +37,16 @@ export function Tour({
   onTell(): void;
 }) {
   const stops = story?.stops ?? [];
-  const i = Math.min(stop, Math.max(0, stops.length - 1));
+  const notes = useMemo(() => assignNotes(lenses, stops), [lenses, stops]);
+  // Notes about classes no key change shows get a page of their own after the key changes.
+  const pages = stops.length + (notes.rest.length ? 1 : 0);
+  const i = Math.min(stop, Math.max(0, pages - 1));
   const current = stops[i];
+  const onRest = !current && i === stops.length && notes.rest.length > 0;
+  const openClass = (name: string, t: PanelTab = "shape") => {
+    setTab(t);
+    setModal(name);
+  };
   // Clicking a box opens that class's panel over the summary, without leaving it.
   const [modal, setModal] = useState<string | null>(null);
   const [tab, setTab] = useState<PanelTab>("shape");
@@ -65,6 +79,14 @@ export function Tour({
               </button>
             </li>
           ))}
+          {notes.rest.length > 0 && (
+            <li>
+              <button aria-current={onRest} onClick={() => onStop(stops.length)}>
+                <span className="stop-num flat">+</span>
+                <span className="stop-title">More from the books</span>
+              </button>
+            </li>
+          )}
         </ol>
         <div className="tour-source">
           {story?.status === "running" ? (
@@ -106,15 +128,12 @@ export function Tour({
             <StopDiagram
               comparison={c}
               classes={current.classes}
-              onOpen={(name) => {
-                setTab("shape");
-                setModal(name);
-              }}
+              onOpen={(name) => openClass(name)}
             />
             <p className="stop-look">
               <EyeIcon /> {current.look}
             </p>
-            <LensNotes lenses={lenses} classes={current.classes} />
+            <LensNotes comparison={c} notes={notes.byStop[i] ?? []} title="What the books ask about this" onOpen={openClass} />
             <footer className="stop-foot">
               <button className="btn" disabled={i === 0} onClick={() => onStop(i - 1)}>
                 ← Back
@@ -122,8 +141,20 @@ export function Tour({
               <button className="btn ghost" onClick={() => onOpen(current.classes[0])}>
                 Explore {shortName(current.classes[0])} in the map
               </button>
-              <button className="btn primary" disabled={i === stops.length - 1} onClick={() => onStop(i + 1)}>
+              <button className="btn primary" disabled={i === pages - 1} onClick={() => onStop(i + 1)}>
                 Next →
+              </button>
+            </footer>
+          </article>
+        ) : onRest ? (
+          <article className="stop" key="rest">
+            <div className="stop-meta">After the key changes</div>
+            <h2 className="stop-heading">More from the books</h2>
+            <p className="stop-explain">What the three books asked about classes none of the key changes covers.</p>
+            <LensNotes comparison={c} notes={notes.rest} onOpen={openClass} />
+            <footer className="stop-foot">
+              <button className="btn" onClick={() => onStop(i - 1)}>
+                ← Back
               </button>
             </footer>
           </article>
@@ -160,6 +191,7 @@ export function Tour({
               change={modalChange}
               comparison={c}
               lenses={lenses}
+              showLenses={false}
               head={c.head.sha}
               tab={tab}
               onTab={setTab}
@@ -211,34 +243,69 @@ function Verdict({ stops }: { stops: Story["stops"] }) {
   );
 }
 
-/** What the lenses said about this stop's classes: at most three, the most pointed first. */
-function LensNotes({ lenses, classes }: { lenses: LensReport | null; classes: string[] }) {
-  if (!lenses || lenses.status === "idle") return null;
-  const names = new Set(classes);
-  // Which of the stop's classes a question is about; the stop's main class comes first.
-  const about = (q: LensQuestion) => {
-    const n = q.target?.name.split(/[#.]/)[0];
-    if (!n) return -1;
-    return classes.findIndex((c) => c === n || c.endsWith(`::${n}`));
-  };
+/**
+ * Gives each lens note one home: the first key change whose main class it is
+ * about, else the first key change that draws its class. The rest go on a
+ * page of their own.
+ */
+function assignNotes(lenses: LensReport | null, stops: Story["stops"]): { byStop: Note[][]; rest: Note[] } {
+  const byStop: Note[][] = stops.map(() => []);
+  const rest: Note[] = [];
+  if (!lenses) return { byStop, rest };
+  const same = (a: string, n: string) => a === n || a.endsWith(`::${n}`);
   const rank = { worries: 0, asks: 1, likes: 2 } as const;
-  const notes = lenses.lenses
-    .flatMap((l) => l.questions.map((q) => ({ lens: l.lens, q, at: about(q) })))
-    .filter((x) => x.at >= 0 && names.size > 0)
-    .sort((a, b) => a.at - b.at || rank[a.q.tone] - rank[b.q.tone])
-    .slice(0, 3);
+  for (const l of lenses.lenses) {
+    for (const q of l.questions) {
+      const [n, method] = q.target?.name.split(/[#.]/) ?? [];
+      // Among key changes about the same class, prefer the one whose text names the method.
+      const pick = (ok: (s: Story["stops"][number]) => boolean) => {
+        const hits = stops.map((s, k) => (ok(s) ? k : -1)).filter((k) => k >= 0);
+        const named = method ? hits.find((k) => `${stops[k].title} ${stops[k].explain} ${stops[k].look}`.includes(method)) : undefined;
+        return named ?? hits[0] ?? -1;
+      };
+      let home = n ? pick((s) => same(s.classes[0], n)) : -1;
+      if (home < 0 && n) home = pick((s) => s.classes.some((k) => same(k, n)));
+      (home >= 0 ? byStop[home] : rest).push({ lens: l.lens, q });
+    }
+  }
+  for (const list of [...byStop, rest]) list.sort((a, b) => rank[a.q.tone] - rank[b.q.tone]);
+  return { byStop, rest };
+}
+
+/** The lens notes, each with a way to the code it is about. */
+function LensNotes({ comparison, notes, title, onOpen }: { comparison: Comparison; notes: Note[]; title?: string; onOpen(name: string, tab?: PanelTab): void }) {
   if (!notes.length) return null;
   return (
     <div className="stop-lenses">
-      <div className="kicker">What the books ask about this</div>
-      {notes.map(({ lens, q }, j) => (
-        <div key={j} className="stop-lens">
-          <div className="who">
-            {WHO[lens]} <span className={`pill ${q.tone}`}>{q.tone}</span>
-          </div>
-          <p>{q.text}</p>
-        </div>
+      {title && <div className="kicker">{title}</div>}
+      {notes.map((n, j) => (
+        <LensNote key={j} comparison={comparison} note={n} onOpen={onOpen} />
       ))}
+    </div>
+  );
+}
+
+function LensNote({ comparison, note: { lens, q }, onOpen }: { comparison: Comparison; note: Note; onOpen(name: string, tab?: PanelTab): void }) {
+  const [open, setOpen] = useState(false);
+  const target = q.target ? resolveTarget(comparison, q.target.name) : null;
+  return (
+    <div className="stop-lens">
+      <div className="who">
+        {WHO[lens]} <span className={`pill ${q.tone}`}>{q.tone}</span>
+        {target && (
+          <button className="target-chip" onClick={() => (target.method ? setOpen(!open) : onOpen(target.change.name, "code"))} title={target.method ? "Show this method's code" : "Open this class's code"}>
+            {shortName(target.change.name)}
+            {target.method ? `#${target.method}` : ""}
+          </button>
+        )}
+      </div>
+      <p>{q.text}</p>
+      {target?.method && (
+        <button className="linkish code-toggle" onClick={() => setOpen(!open)}>
+          {open ? "Hide the code" : `Show ${target.method}`}
+        </button>
+      )}
+      {open && target?.method && <MethodCode comparison={comparison} change={target.change} method={target.method} />}
     </div>
   );
 }

@@ -128,7 +128,7 @@ Argue only from the checklist below. It was built from the book with quotes chec
 
 The measurements below come from parsing the code at both commits. Treat them as facts. Every question you write must point at something specific in the measurements or the diff, and its evidence must say what was measured or seen.
 
-Write 2 to 5 items. Each is either something the book would like about this change ("likes") or a pointed question it would ask ("asks"), or a real concern ("worries"). Lead with what matters most. Do not give scores. Questions should be answerable: name the class or method and say what would change the answer. Plain, direct sentences; no hedging filler; no em dashes. Put the class (or area, or "Class#method") the item is about in target, using names exactly as they appear in the measurements.
+Write 2 to 5 items. Each is either something the book would like about this change ("likes") or a pointed question it would ask ("asks"), or a real concern ("worries"). Lead with what matters most. Do not give scores. Questions should be answerable: name the class or method and say what would change the answer. Plain, direct sentences; no hedging filler; no em dashes. Put the class (or area, or "Class#method") the item is about in target, using names exactly as they appear in the measurements. Use "Class#method" (or "Class.method" for a class method) whenever the item is about a specific method, so the reader can jump straight to that code.
 
 The book treats its rules as guidelines, so phrase hits as questions about the cost of change, not as failures.
 
