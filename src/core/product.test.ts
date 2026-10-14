@@ -23,6 +23,7 @@ const AFTER = `ActiveRecord::Schema[8.1].define(version: 2) do
     t.string "name", null: false
     t.bigint "org_id", null: false
     t.integer "price_cents", null: false
+    t.index ["org_id"], name: "index_fees_on_org_id", unique: true
     t.check_constraint "price_cents >= 0", name: "fees_price_non_negative"
   end
 
@@ -61,6 +62,8 @@ describe("schema", () => {
     expect(t[1].columns.map((c) => `${c.status} ${c.name}`)).toEqual(["added sent_at", "added sent_by_id"]);
     expect(t[1].otherColumns).toBe(2);
     expect(t[1].references.find((r) => r.column === "sent_by_id")?.status).toBe("added");
+    expect(t[0].references.find((r) => r.column === "org_id")?.one).toBe(true);
+    expect(t[1].references.find((r) => r.column === "org_id")?.one).toBe(false);
   });
 });
 

@@ -12,6 +12,12 @@ const dark = () =>
   document.documentElement.dataset.theme === "dark" ||
   (document.documentElement.dataset.theme !== "light" && window.matchMedia("(prefers-color-scheme: dark)").matches);
 
+/** Tall enough for the longest participant name, which arrives already broken into lines with <br/>. */
+function actorHeight(text: string): number {
+  const lines = Math.max(1, ...text.split("\n").filter((l) => /^\s*participant\s/.test(l)).map((l) => l.split("<br/>").length));
+  return 14 + lines * 16;
+}
+
 /** Renders Mermaid text in the page's colours; loads Mermaid only when first needed. */
 export function Mermaid({ text }: { text: string }) {
   const ref = useRef<HTMLDivElement>(null);
@@ -42,7 +48,7 @@ export function Mermaid({ text }: { text: string }) {
           noteTextColor: v("--ink"),
           fontSize: "13px",
         },
-        sequence: { useMaxWidth: false, mirrorActors: false, actorMargin: 24, messageMargin: 18, boxMargin: 6, width: 110, height: 34, actorFontSize: 12, messageFontSize: 11.5, noteFontSize: 11.5, wrap: true },
+        sequence: { useMaxWidth: false, mirrorActors: false, actorMargin: 24, messageMargin: 18, boxMargin: 6, width: 120, height: actorHeight(text), actorFontSize: 12, messageFontSize: 11.5, noteFontSize: 11.5, wrap: false },
       });
       try {
         const { svg } = await m.render(`refract-mmd-${seq++}`, text);

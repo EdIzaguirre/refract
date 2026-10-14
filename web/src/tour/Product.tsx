@@ -54,6 +54,11 @@ export function ProductPage({ product: p, story, onNext }: { product: ProductCha
           <h3>Data</h3>
           {caption("data") && <p className="stop-explain">{caption("data")}</p>}
           {p.tables.length > 0 && <TablesDiagram tables={p.tables} />}
+          {p.tables.length > 0 && (
+            <p className="product-note">
+              Each arrow is a belongs-to: the table it starts from holds the column that points at the other. The word at its start says how many of those rows one row at the arrowhead can have: <b>many</b> (has_many) or <b>one</b> (has_one, from a unique index). Green arrows are new. Hover an arrow for its column.
+            </p>
+          )}
           {dataOnly.length > 0 && (
             <p className="product-note">
               {dataOnly.length === 1 ? "One migration only moves data: " : `${dataOnly.length} migrations only move data: `}
@@ -255,7 +260,7 @@ function boxFor(t: TableChange | null, name: string): Omit<TableBox, "x" | "y"> 
 const elk = new ELK();
 
 function TablesDiagram({ tables }: { tables: TableChange[] }) {
-  const [drawing, setDrawing] = useState<{ width: number; height: number; boxes: TableBox[]; edges: { path: string; status: ChangeStatus; label: string }[] } | null>(null);
+  const [drawing, setDrawing] = useState<{ width: number; height: number; boxes: TableBox[]; edges: { path: string; status: ChangeStatus; label: string; one: boolean; at: { x: number; y: number } }[] } | null>(null);
   useEffect(() => {
     let stale = false;
     const byName = new Map(tables.map((t) => [t.name, t]));
@@ -298,7 +303,19 @@ function TablesDiagram({ tables }: { tables: TableChange[] }) {
           if (!s) return [];
           const pts = [s.startPoint, ...(s.bendPoints ?? []), s.endPoint].map((p) => ({ x: p.x + PAD, y: p.y + PAD }));
           const word = { added: "New reference", removed: "Removed reference", unchanged: "Existing reference", changed: "Reference" }[e.r.status];
-          return [{ path: splinePath(pts), status: e.r.status, label: `${word}: ${e.r.from}.${e.r.column} points at ${e.r.to}, so each ${e.r.from} row belongs to one ${e.r.to} row.` }];
+          const has = e.r.one ? `has at most one ${e.r.from} row (${e.r.column} has a unique index)` : `can have many ${e.r.from} rows`;
+          // The one / many label sits at the arrow's start, just outside the table it counts;
+          // arrowheads crowd together on popular tables like orgs, starts don't.
+          const at = { x: pts[0].x + 4, y: pts[0].y - 8 };
+          return [
+            {
+              path: splinePath(pts),
+              status: e.r.status,
+              one: e.r.one,
+              at,
+              label: `${word}: ${e.r.from}.${e.r.column} points at ${e.r.to}. Each ${e.r.from} row belongs to one ${e.r.to} row, and each ${e.r.to} row ${has}.`,
+            },
+          ];
         });
         setDrawing({ width: (g.width ?? 0) + PAD * 2, height: (g.height ?? 0) + PAD * 2, boxes: placed, edges });
       });
@@ -351,6 +368,12 @@ function TablesDiagram({ tables }: { tables: TableChange[] }) {
               </text>
             )}
           </g>
+        ))}
+        {/* Drawn last so no box covers them. */}
+        {drawing.edges.map((e, i) => (
+          <text key={`card-${i}`} className={`tbl-card ${e.status === "added" ? "new" : ""}`} x={e.at.x} y={e.at.y}>
+            {e.one ? "one" : "many"}
+          </text>
         ))}
       </svg>
     </div>

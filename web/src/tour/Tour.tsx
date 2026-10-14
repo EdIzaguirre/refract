@@ -52,18 +52,27 @@ export function Tour({
   const i = page - P;
   const current = i >= 0 ? stops[i] : undefined;
   const onBooks = !onProduct && !current && stops.length > 0 && i === stops.length;
+  // Clicking a box opens that class's panel over the summary, without leaving it. Following a
+  // dependency inside the panel keeps a trail, so Back and Forward work like a browser's.
+  const [trail, setTrail] = useState<{ names: string[]; at: number }>({ names: [], at: -1 });
+  const modal = trail.names[trail.at] ?? null;
+  const [tab, setTab] = useState<PanelTab>("shape");
   const openClass = (name: string, t: PanelTab = "shape") => {
     setTab(t);
-    setModal(name);
+    setTrail({ names: [name], at: 0 });
   };
-  // Clicking a box opens that class's panel over the summary, without leaving it.
-  const [modal, setModal] = useState<string | null>(null);
-  const [tab, setTab] = useState<PanelTab>("shape");
+  const goClass = (name: string) => setTrail((tr) => ({ names: [...tr.names.slice(0, tr.at + 1), name], at: tr.at + 1 }));
+  const step = (d: number) => setTrail((tr) => ({ ...tr, at: Math.max(0, Math.min(tr.names.length - 1, tr.at + d)) }));
+  const closeModal = () => setTrail({ names: [], at: -1 });
   const modalChange = modal ? (c.classes.find((k) => k.name === modal) ?? null) : null;
   useEffect(() => {
     if (!modal) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setModal(null);
+      if (e.key === "Escape") closeModal();
+      if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
+        e.preventDefault();
+        step(e.key === "ArrowLeft" ? -1 : 1);
+      }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -207,8 +216,25 @@ export function Tour({
         )}
       </section>
       {modalChange && (
-        <div className="modal-back" onClick={(e) => e.target === e.currentTarget && setModal(null)}>
+        <div className="modal-back" onClick={(e) => e.target === e.currentTarget && closeModal()}>
           <div className="modal" role="dialog" aria-modal="true">
+            {trail.names.length > 1 && (
+              <nav className="modal-trail" aria-label="Classes you opened">
+                <button className="btn" disabled={trail.at === 0} onClick={() => step(-1)} title="Back (←)">
+                  ← {trail.at > 0 ? shortName(trail.names[trail.at - 1]) : "Back"}
+                </button>
+                <span className="modal-trail-path">
+                  {trail.names.map((n, j) => (
+                    <button key={j} className={`linkish ${j === trail.at ? "here" : ""}`} onClick={() => setTrail((tr) => ({ ...tr, at: j }))}>
+                      {shortName(n)}
+                    </button>
+                  ))}
+                </span>
+                <button className="btn" disabled={trail.at === trail.names.length - 1} onClick={() => step(1)} title="Forward (→)">
+                  {trail.at < trail.names.length - 1 ? shortName(trail.names[trail.at + 1]) : "Forward"} →
+                </button>
+              </nav>
+            )}
             <ClassPanel
               key={modalChange.name}
               change={modalChange}
@@ -218,8 +244,8 @@ export function Tour({
               head={c.head.sha}
               tab={tab}
               onTab={setTab}
-              onClose={() => setModal(null)}
-              onGo={setModal}
+              onClose={closeModal}
+              onGo={goClass}
             />
             <button className="btn ghost modal-map" onClick={() => onOpen(modalChange.name)}>
               Show {shortName(modalChange.name)} in the map

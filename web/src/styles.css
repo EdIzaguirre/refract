@@ -450,3 +450,13 @@ a { color: var(--accent); }
 .book-line:hover { color: var(--ink); }
 .tbl-edge-hit { fill: none; stroke: transparent; stroke-width: 14; pointer-events: stroke; cursor: help; }
 .tbl-edge:hover .fig-edge { stroke-width: 3; }
+.tbl-card { font-family: var(--font-mono); font-size: 10px; font-weight: 600; fill: var(--muted); paint-order: stroke; stroke: var(--surface); stroke-width: 3px; stroke-linejoin: round; pointer-events: none; }
+.tbl-card.new { fill: var(--good); }
+.modal-trail { position: absolute; top: 0; left: 0; right: 0; height: 48px; z-index: 12; display: flex; align-items: center; gap: 10px; padding: 0 16px; border-bottom: 1px solid var(--rule); background: var(--paper); }
+.modal-trail .btn { font-size: 0.8rem; padding: 4px 10px; white-space: nowrap; }
+.modal-trail-path { flex: 1; min-width: 0; display: flex; gap: 4px; overflow-x: auto; font-family: var(--font-mono); font-size: 0.76rem; color: var(--muted); }
+.modal-trail-path button { white-space: nowrap; color: var(--muted); }
+.modal-trail-path button + button::before { content: "›"; margin-right: 4px; color: var(--faint); }
+.modal-trail-path button.here { color: var(--ink); font-weight: 600; text-decoration: none; }
+.modal:has(.modal-trail) .panel { top: 48px; }
+.modal:has(.modal-trail) .modal-map { top: 60px; }

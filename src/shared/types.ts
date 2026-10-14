@@ -412,7 +412,8 @@ export interface TableChange {
   /** Columns the change left alone, counted so the drawing can say "and 12 more". */
   otherColumns: number;
   /** Foreign keys on the after side (or before, for a removed table). */
-  references: { to: string; column: string; status: ChangeStatus }[];
+  /** `one` when the column has its own unique index, so the referenced row has at most one of these. */
+  references: { to: string; column: string; one: boolean; status: ChangeStatus }[];
   checks: { added: number; removed: number };
 }
 

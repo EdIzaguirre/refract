@@ -23,6 +23,8 @@ import { singularize } from "./inflect.js";
 interface Table {
   columns: Map<string, { type: string; note: string }>;
   checks: Set<string>;
+  /** Columns with a unique index of their own, so each value appears at most once. */
+  unique: Set<string>;
 }
 
 export interface Schema {
@@ -40,7 +42,7 @@ export function parseSchema(text: string): Schema {
   for (const line of text.split("\n")) {
     const create = line.match(/^\s*create_table\s+"([^"]+)"/);
     if (create) {
-      current = { columns: new Map(), checks: new Set() };
+      current = { columns: new Map(), checks: new Set(), unique: new Set() };
       tables.set(create[1], current);
       continue;
     }
@@ -53,6 +55,9 @@ export function parseSchema(text: string): Schema {
       if (col && !NOT_COLUMNS.has(col[1])) current.columns.set(col[2], { type: col[1], note: columnNote(col[3]) });
       const check = line.match(/^\s*t\.check_constraint\s.*name:\s*"([^"]+)"/);
       if (check) current.checks.add(check[1]);
+      // A partial unique index (with where:) only limits some rows, so it doesn't make the column one-to-one.
+      const unique = line.match(/^\s*t\.index\s+\["([^"]+)"\].*unique:\s*true/);
+      if (unique && !/where:/.test(line)) current.unique.add(unique[1]);
       continue;
     }
     const fk = line.match(/^\s*add_foreign_key\s+"([^"]+)",\s*"([^"]+)"(.*)$/);
@@ -109,8 +114,8 @@ export function compareSchemas(before: Schema | null, after: Schema | null): Tab
     const fa = fks(after, name);
     const key = (f: { to: string; column: string }) => `${f.to}.${f.column}`;
     const references = [
-      ...fa.map((f) => ({ to: f.to, column: f.column, status: (fb.some((x) => key(x) === key(f)) ? "unchanged" : "added") as ChangeStatus })),
-      ...fb.filter((f) => !fa.some((x) => key(x) === key(f))).map((f) => ({ to: f.to, column: f.column, status: "removed" as ChangeStatus })),
+      ...fa.map((f) => ({ to: f.to, column: f.column, one: !!ta?.unique.has(f.column), status: (fb.some((x) => key(x) === key(f)) ? "unchanged" : "added") as ChangeStatus })),
+      ...fb.filter((f) => !fa.some((x) => key(x) === key(f))).map((f) => ({ to: f.to, column: f.column, one: !!tb?.unique.has(f.column), status: "removed" as ChangeStatus })),
     ];
     const checks = {
       added: [...(ta?.checks ?? [])].filter((x) => !tb?.checks.has(x)).length,

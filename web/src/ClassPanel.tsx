@@ -225,11 +225,28 @@ function DepList({ title, edges, onGo }: { title: string; edges: { name: string;
   );
 }
 
+/**
+ * A class name broken between its words, never inside one: "TimesheetPdfGenerationJob"
+ * becomes "TimesheetPdf / GenerationJob" on two lines. A namespace goes on its own line.
+ */
+function actorName(name: string): string {
+  const parts = name.split("::");
+  const last = parts.pop()!;
+  const words = last.match(/[A-Z]+(?![a-z])|[A-Z]?[a-z\d]+/g) ?? [last];
+  const lines: string[] = [];
+  for (const w of words) {
+    if (lines.length && lines[lines.length - 1].length + w.length <= 14) lines[lines.length - 1] += w;
+    else lines.push(w);
+  }
+  if (parts.length) lines.unshift(`${parts.slice(-1)[0]}::`);
+  return lines.join("<br/>").replace(/[;#"]/g, " ");
+}
+
 function toMermaid(seq: Sequence): string {
   const id = new Map(seq.participants.map((p, i) => [p, `p${i}`]));
   const label = (s: string) => s.replace(/[;:#"]/g, " ");
   const lines = ["sequenceDiagram"];
-  for (const p of seq.participants) lines.push(`  participant ${id.get(p)} as ${p.split("::").slice(-2).join("::").replace(/[;#"]/g, " ")}`);
+  for (const p of seq.participants) lines.push(`  participant ${id.get(p)} as ${actorName(p)}`);
   for (const m of seq.messages) lines.push(`  ${id.get(m.from)}${m.observed ? "->>" : "-->>"}${id.get(m.to)}: ${label(m.label)}`);
   if (!seq.messages.length) lines.push(`  Note over ${id.get(seq.participants[0])}: no calls into the app's own classes`);
   return lines.join("\n");
