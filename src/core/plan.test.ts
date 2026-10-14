@@ -109,7 +109,7 @@ describe("plans against the sample shop", () => {
     const of = (status: PlanItem["status"]) => items.filter((i) => i.status === status).map((i) => i.text);
     expect(of("built")).toEqual(expect.arrayContaining(["Receipts", '"customer pays"']));
     expect(of("missing")).toEqual(expect.arrayContaining(["Receipts#resend", "refund on OrdersController"]));
-    expect(of("different")).toEqual(expect.arrayContaining(["Receipts#send_for takes 2 parameters; the plan said 1", "Receipts does not use Order"]));
+    expect(of("different")).toEqual(expect.arrayContaining(["Receipts#send_for takes 2 parameters; the plan said 1", "Receipts never names Order"]));
     expect(of("surprise")).toEqual(expect.arrayContaining(["A new service: Payments::Gateway", "Order gained coupon, subtotal and discount", "Checkout.new now takes 2 parameters (was 1)"]));
   });
 });

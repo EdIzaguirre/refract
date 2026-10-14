@@ -375,7 +375,7 @@ export function planStory(c: Comparison, plan: Plan): Story {
     stops.push({
       id: `flow-${f.name}`,
       title: `How it runs: ${f.name}`,
-      explain: `${f.steps.map((s) => `${short(s.cls)}${s.scope === "class" ? "." : "#"}${s.method}`).join(", then ")}.`,
+      explain: `${f.steps.map((s) => `${short(s.cls)}${s.scope === "class" ? "." : "#"}${s.method}`).join(", then ")}`.replace(/[^!?]$/, "$&."),
       look: "Green arrows are the dependencies the plan adds; the sequence diagram below follows the calls in order.",
       tone: "flat",
       classes: cls.slice(0, 6),

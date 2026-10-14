@@ -12,6 +12,10 @@ import { findClass, modelFor } from "./plan-preview.js";
 const short = (n: string) => n.split("::").pop() ?? n;
 const andList = (xs: string[]) => (xs.length <= 1 ? (xs[0] ?? "") : `${xs.slice(0, -1).join(", ")} and ${xs[xs.length - 1]}`);
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
+/** A long list reads as its first few names; the rest go in the line's detail. */
+const LONG = 6;
+const someList = (xs: string[]) => (xs.length <= LONG ? andList(xs) : `${xs.slice(0, LONG - 1).join(", ")} and ${xs.length - LONG + 1} more`);
+const fullList = (xs: string[]) => (xs.length > LONG ? `All of them: ${xs.join(", ")}.` : undefined);
 
 export function checkPlan(plan: Plan, c: Comparison, before: Snapshot, after: Snapshot): PlanCheck {
   const items: PlanItem[] = [];
@@ -206,13 +210,14 @@ export function checkPlan(plan: Plan, c: Comparison, before: Snapshot, after: Sn
     const extra = publicOf(unit)
       .filter((m) => !planned.has(`${m.scope}:${m.name}`) && !was?.methods.some((x) => x.name === m.name && x.scope === m.scope))
       .map((m) => (m.scope === "class" ? `self.${m.name}` : m.name));
-    if (extra.length) add("classes", "surprise", `${short(name)} also has ${andList(extra)}`, cls(name));
+    if (extra.length) add("classes", "surprise", `${short(name)} also has ${someList(extra)}`, cls(name), fullList(extra));
     const deps = new Set(unit.dependsOn.map((d) => d.to));
     const noDeps = k.dependsOn.filter((d) => {
       const to = nowClass(d);
       return !to || !deps.has(to);
     });
-    if (noDeps.length) add("classes", "different", `${short(name)} does not use ${andList(noDeps.map(short))}`, cls(name));
+    if (noDeps.length)
+      add("classes", "different", `${short(name)} never names ${andList(noDeps.map(short))}`, cls(name), "It may still be handed them as arguments; Refract only sees the classes the code names.");
   }
   // Classes the product sections already account for are not surprises here.
   const accounted = new Set<string>([
@@ -232,7 +237,7 @@ export function checkPlan(plan: Plan, c: Comparison, before: Snapshot, after: Sn
     }
     if (k.status !== "changed" || covered.has(k.role)) continue;
     const newPublic = k.methods.filter((m) => m.status === "added" && m.after?.visibility === "public").map((m) => (m.scope === "class" ? `self.${m.name}` : m.name));
-    if (newPublic.length) add("classes", "surprise", `${short(k.name)} gained ${andList(newPublic.map((m) => `${m}`))}`, cls(k.name, newPublic.length === 1 ? newPublic[0].replace(/^self\./, "") : undefined));
+    if (newPublic.length) add("classes", "surprise", `${short(k.name)} gained ${someList(newPublic)}`, cls(k.name, newPublic.length === 1 ? newPublic[0].replace(/^self\./, "") : undefined), fullList(newPublic));
     for (const m of k.methods) {
       if (m.status !== "changed" || !m.before || !m.after || m.after.visibility !== "public" || m.before.params === m.after.params) continue;
       const label = m.name === "initialize" ? `${short(k.name)}.new` : `${short(k.name)}${m.scope === "class" ? "." : "#"}${m.name}`;
