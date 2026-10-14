@@ -32,7 +32,7 @@ const ease = (t: number) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 
  * classes. An area opens as it grows to fill the view, like a city on a map.
  */
 const openness = (a: Rect, k: number, vp: { w: number; h: number }) =>
-  clamp((Math.max((k * a.w) / vp.w, (k * a.h) / vp.h) - 0.28) / 0.22);
+  clamp((Math.max((k * a.w) / vp.w, (k * a.h) / vp.h) - 0.5) / 0.2);
 
 /** The map: one canvas, or two side by side (before | after) that pan and zoom together. */
 export const MapView = forwardRef<MapHandle, Props>(function MapView(props, ref) {
@@ -189,15 +189,18 @@ function Canvas({ index, register, onZoom, k, phase, tag, layout, selected, onSe
     return () => register(index, null);
   }, [index, register, onZoom, layout]);
 
+  // Hovering a class lights up its links, the same way selecting it does.
+  const [hover, setHover] = useState<string | null>(null);
+  const focus = hover ?? selected;
   const neighbours = useMemo(() => {
-    if (!selected) return null;
-    const s = new Set([selected]);
+    if (!focus) return null;
+    const s = new Set([focus]);
     for (const e of layout.edges) {
-      if (e.from === selected) s.add(e.to);
-      if (e.to === selected) s.add(e.from);
+      if (e.from === focus) s.add(e.to);
+      if (e.to === focus) s.add(e.from);
     }
     return s;
-  }, [selected, layout]);
+  }, [focus, layout]);
 
   const open = useMemo(() => {
     const node = svgRef.current;
@@ -205,6 +208,11 @@ function Canvas({ index, register, onZoom, k, phase, tag, layout, selected, onSe
     return new Map(layout.areas.map((a) => [a.id, openness(a, k, vp)]));
   }, [layout, k]);
   const p = ease(phase);
+  // The area this change touched most is where a first look should start.
+  const start = useMemo(() => {
+    const score = (a: AreaNode) => a.change.changedClasses * 3 + a.change.changedFiles;
+    return [...layout.areas].filter((a) => a.changed).sort((a, b) => score(b) - score(a))[0]?.id ?? null;
+  }, [layout]);
 
   return (
     <div className="canvas">
@@ -226,7 +234,7 @@ function Canvas({ index, register, onZoom, k, phase, tag, layout, selected, onSe
             <AreaBack key={a.id} area={a} open={open.get(a.id)!} k={k} focus={focusArea === a.id} />
           ))}
           <City layout={layout} k={k} selected={selected} onSelect={onSelect} open={open} />
-          <Edges layout={layout} p={p} open={open} selected={selected} index={index} />
+          <Edges layout={layout} p={p} open={open} selected={focus} index={index} />
           {[...layout.classes.values()]
             .filter((n) => n.featured)
             .map((n) => (
@@ -238,12 +246,13 @@ function Canvas({ index, register, onZoom, k, phase, tag, layout, selected, onSe
                 open={open.get(n.area) ?? 1}
                 selected={selected === n.name}
                 dim={neighbours ? !neighbours.has(n.name) : false}
+                onHover={setHover}
                 onSelect={onSelect}
               />
             ))}
           <AreaLinks layout={layout} open={open} index={index} p={p} />
           {layout.areas.map((a) => (
-            <AreaCover key={a.id} area={a} open={open.get(a.id)!} k={k} onOpen={(id) => flyArea.current(id)} />
+            <AreaCover key={a.id} area={a} open={open.get(a.id)!} k={k} start={a.id === start} onOpen={(id) => flyArea.current(id)} />
           ))}
         </g>
       </svg>
@@ -272,7 +281,7 @@ function AreaBack({ area, open, k, focus }: { area: AreaNode; open: number; k: n
   );
 }
 
-function AreaCover({ area, open, k, onOpen }: { area: AreaNode; open: number; k: number; onOpen(id: string): void }) {
+function AreaCover({ area, open, k, start, onOpen }: { area: AreaNode; open: number; k: number; start: boolean; onOpen(id: string): void }) {
   if (open >= 0.98) return null;
   const ch = area.change;
   const screenW = area.w * k;
@@ -280,15 +289,18 @@ function AreaCover({ area, open, k, onOpen }: { area: AreaNode; open: number; k:
   const titlePx = clamp(Math.min(screenW / 11, (screenW * 0.86) / (ch.name.length * 0.52)), 8, 30);
   const subPx = clamp(titlePx * 0.48, 7, 13);
   const intensity = area.changed ? clamp((ch.changedFiles + ch.changedClasses) / 40, 0, 1) : 0;
-  const delta = ch.after.codeLines - ch.before.codeLines;
-  const roomy = screenW > 260;
+  const roomy = screenW > 220;
+  const added = ch.after.classes - ch.before.classes;
+  const plural = (n: number, w: string) => `${n} ${w}${n === 1 ? "" : "es"}`;
   const sub = area.changed
-    ? roomy
-      ? `${ch.changedFiles} files changed · ${ch.changedClasses} classes${delta ? ` · ${delta > 0 ? "+" : ""}${delta} lines` : ""}`
-      : `${ch.changedFiles} changed`
+    ? ch.changedClasses
+      ? roomy && added > 0
+        ? `${plural(ch.changedClasses, "class")} changed, ${added} new`
+        : `${plural(ch.changedClasses, "class")} changed`
+      : `${ch.changedFiles} file${ch.changedFiles === 1 ? "" : "s"} changed`
     : roomy
-      ? `${ch.after.classes} classes · ${ch.after.codeLines.toLocaleString()} lines`
-      : `${ch.after.classes} classes`;
+      ? `untouched · ${plural(ch.after.classes, "class")}`
+      : "untouched";
   return (
     <g
       opacity={1 - open}
@@ -299,13 +311,21 @@ function AreaCover({ area, open, k, onOpen }: { area: AreaNode; open: number; k:
       }}
     >
       <title>{`${ch.name}\n${ch.description ?? ""}\n${ch.after.classes} classes · ${ch.after.codeLines.toLocaleString()} lines`}</title>
-      <rect x={area.x} y={area.y} width={area.w} height={area.h} rx={14} className={`area-cover ${area.changed ? "changed" : ""}`} fillOpacity={area.changed ? 0.5 + intensity * 0.4 : 0.85} />
+      <rect x={area.x} y={area.y} width={area.w} height={area.h} rx={14} className={`area-cover ${area.changed ? "changed" : ""} ${start ? "start" : ""}`} fillOpacity={area.changed ? 0.45 + intensity * 0.55 : 0.85} />
       <text x={area.x + area.w / 2} y={area.y + area.h / 2 - (subPx * 0.3) / k} textAnchor="middle" className="area-title" fontSize={titlePx / k}>
         {ch.name}
       </text>
       <text x={area.x + area.w / 2} y={area.y + area.h / 2 + (subPx * 1.6) / k} textAnchor="middle" className="area-sub" fontSize={subPx / k}>
         {sub}
       </text>
+      {start && open < 0.3 && (
+        <g className="start-here" transform={`translate(${area.x + area.w / 2} ${area.y}) scale(${1 / k})`}>
+          <rect x={-42} y={-13} width={84} height={26} rx={13} />
+          <text y={4.5} textAnchor="middle">
+            Start here
+          </text>
+        </g>
+      )}
     </g>
   );
 }
@@ -355,8 +375,9 @@ function Edges({ layout, p, open, selected, index }: { layout: MapLayout; p: num
         if (o < 0.05) return null;
         const status = e.edge.status;
         const touchesSelected = selected !== null && (e.from === selected || e.to === selected);
-        // Unchanged links between areas only show for the selected class; otherwise they are noise.
-        if (e.cross && status === "unchanged" && !touchesSelected) return null;
+        // At first only the links this change made or broke inside an area show. A class's other
+        // links, and anything reaching into another area, wait until you hover or pick that class.
+        if (!touchesSelected && (e.cross || status === "unchanged")) return null;
         const alpha = status === "added" ? p : status === "removed" ? 1 - p * 0.75 : 1;
         if (alpha < 0.02) return null;
         const hl = touchesSelected;
@@ -376,17 +397,8 @@ function Edges({ layout, p, open, selected, index }: { layout: MapLayout; p: num
 }
 
 function AreaLinks({ layout, open, index, p }: { layout: MapLayout; open: Map<string, number>; index: number; p: number }) {
-  // New and removed links always show. Of the rest, only each changed area's strongest two, kept faint.
-  const changedAreas = new Set(layout.areas.filter((a) => a.changed).map((a) => a.id));
-  const strongest = new Set<string>();
-  for (const id of changedAreas) {
-    layout.areaLinks
-      .filter((l) => l.status === "unchanged" && (l.from === id || l.to === id))
-      .sort((a, b) => b.after - a.after)
-      .slice(0, 2)
-      .forEach((l) => strongest.add(`${l.from}>${l.to}`));
-  }
-  const shown = layout.areaLinks.filter((l) => l.status !== "unchanged" || strongest.has(`${l.from}>${l.to}`));
+  // Only links this change made or broke; the standing ones are background a first look doesn't need.
+  const shown = layout.areaLinks.filter((l) => l.status !== "unchanged");
   return (
     <g>
       {shown.map((l) => {
@@ -423,6 +435,7 @@ function ClassBox({
   selected,
   dim,
   onSelect,
+  onHover,
 }: {
   node: ClassNode;
   p: number;
@@ -431,6 +444,7 @@ function ClassBox({
   selected: boolean;
   dim: boolean;
   onSelect(n: string): void;
+  onHover(n: string | null): void;
 }) {
   const { change: c, before: b, after: a, slot } = node;
   let d: Dims;
@@ -466,6 +480,8 @@ function ClassBox({
     <g
       className={`cls ${cls} ${selected ? "selected" : ""} ${dim ? "dim" : ""}`}
       opacity={opacity * Math.max(open, 0.15)}
+      onPointerEnter={() => open > 0.5 && onHover(c.name)}
+      onPointerLeave={() => onHover(null)}
       onClick={(e) => {
         e.stopPropagation();
         onSelect(c.name);

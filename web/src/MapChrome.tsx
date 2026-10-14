@@ -1,101 +1,140 @@
 import { useState } from "react";
 import type { ClassChange, Comparison } from "../../src/shared/types";
-import type { PanelTab } from "./ClassPanel";
+import type { Mode } from "./App";
 
-/** Where you are on the map: areas, one area, one class, its code. Each step is clickable. */
+/** How deep you are: 1 all areas, 2 inside one area, 3 one class. */
+export type Level = 1 | 2 | 3;
+
+/** Where you are on the map. Shown once you are inside an area; each step is clickable. */
 export function Crumbs({
   comparison,
   openArea,
   selected,
-  tab,
   onAreas,
   onArea,
-  onTab,
 }: {
   comparison: Comparison;
   openArea: string | null;
   selected: ClassChange | null;
-  tab: PanelTab;
   onAreas(): void;
   onArea(id: string): void;
-  onTab(t: PanelTab): void;
 }) {
-  const areaId = selected?.area ?? openArea;
-  const area = comparison.areas.find((a) => a.id === areaId);
-  const level = selected ? (tab === "code" ? 4 : 3) : area ? 2 : 1;
+  const area = comparison.areas.find((a) => a.id === (selected?.area ?? openArea));
+  if (!area) return null;
   return (
-    <nav className="crumbs" aria-label="Zoom level">
-      <button className={level === 1 ? "on" : ""} onClick={onAreas}>
-        <span className="n">1</span>Business areas
+    <nav className="crumbs" aria-label="Where you are">
+      <button onClick={onAreas}>All areas</button>
+      <span className="sep">›</span>
+      <button className={selected ? "" : "on"} onClick={() => onArea(area.id)}>
+        {area.name}
       </button>
-      {area && (
-        <>
-          <span className="sep">›</span>
-          <button className={level === 2 ? "on" : ""} onClick={() => onArea(area.id)}>
-            <span className="n">2</span>
-            {area.name}
-          </button>
-        </>
-      )}
       {selected && (
         <>
           <span className="sep">›</span>
-          <button className={level === 3 ? "on" : ""} onClick={() => onTab("shape")}>
-            <span className="n">3</span>
-            {selected.name.split("::").pop()}
-          </button>
-          <span className="sep">›</span>
-          <button className={level === 4 ? "on" : ""} onClick={() => onTab("code")}>
-            <span className="n">4</span>Code
-          </button>
+          <button className="on">{selected.name.split("::").pop()}</button>
         </>
       )}
     </nav>
   );
 }
 
-export function Legend({ comparison, areasPath, onDraft }: { comparison: Comparison; areasPath: string; onDraft(): void }) {
-  const [open, setOpen] = useState(true);
-  if (!open)
-    return (
-      <button className="legend closed" onClick={() => setOpen(true)}>
-        Legend
-      </button>
-    );
+const SEEN = "refract.hints.seen";
+const readSeen = (): Level[] => {
+  try {
+    return JSON.parse(localStorage.getItem(SEEN) ?? "[]");
+  } catch {
+    return [];
+  }
+};
+
+/**
+ * "What am I looking at?": one short card per zoom level, shown the first
+ * time you reach that level. The ? button brings it back.
+ */
+export function useHints(level: Level) {
+  const [seen, setSeen] = useState<Level[]>(readSeen);
+  const [asked, setAsked] = useState(false);
+  const open = asked || !seen.includes(level);
+  const close = () => {
+    const next = [...new Set([...seen, level])];
+    setSeen(next);
+    setAsked(false);
+    try {
+      localStorage.setItem(SEEN, JSON.stringify(next));
+    } catch {
+      /* hints just come back next time */
+    }
+  };
+  return { open, close, ask: () => setAsked(true) };
+}
+
+export function Hint({ level, comparison, areasPath, onDraft, onClose }: { level: Level; comparison: Comparison; areasPath: string; onDraft(): void; onClose(): void }) {
   return (
-    <div className="legend">
-      <button className="x" onClick={() => setOpen(false)} aria-label="Hide legend">
+    <div className="hint" role="note">
+      <button className="x" onClick={onClose} aria-label="Got it">
         ×
       </button>
-      <div className="row">
-        <svg width="34" height="20">
-          <rect x="1" y="6" width="14" height="13" rx="2" fill="var(--accent-soft)" stroke="var(--accent)" />
-          <rect x="19" y="1" width="14" height="18" rx="2" fill="var(--accent-soft)" stroke="var(--accent)" />
-        </svg>
-        <span>Each class is a box: width is its public interface, height its code. Deep modules are narrow and tall.</span>
-      </div>
-      <div className="row">
-        <svg width="34" height="10">
-          <path d="M1 5H33" stroke="var(--accent)" strokeWidth="2" />
-        </svg>
-        <span>new dependency</span>
-        <svg width="34" height="10">
-          <path d="M1 5H33" stroke="var(--bad)" strokeWidth="1.5" strokeDasharray="5 4" />
-        </svg>
-        <span>removed</span>
-      </div>
-      <div className="row">
-        <span>
-          Areas {comparison.areaSource === "file" ? "from " : "inferred from dependencies. "}
-          {comparison.areaSource === "file" ? (
-            <code title={areasPath}>areas.yml</code>
-          ) : (
-            <button className="btn" style={{ padding: "0 8px" }} onClick={onDraft}>
-              Draft with Claude
-            </button>
-          )}
-        </span>
-      </div>
+      <div className="hint-q">What am I looking at?</div>
+      {level === 1 && (
+        <>
+          <p>Each tile is one part of the product. Bigger tiles hold more code. Teal tiles are the parts this change touched, and the deeper the teal, the more it touched.</p>
+          <p>Click a tile, or scroll to zoom, to look inside.</p>
+          <p className="hint-src">
+            Areas {comparison.areaSource === "file" ? "come from " : "are guessed from who calls whom. "}
+            {comparison.areaSource === "file" ? (
+              <code title={areasPath}>areas.yml</code>
+            ) : (
+              <button className="link" onClick={onDraft}>
+                Name them with Claude
+              </button>
+            )}
+          </p>
+        </>
+      )}
+      {level === 2 && (
+        <>
+          <div className="hint-row">
+            <svg width="34" height="20" aria-hidden>
+              <rect x="1" y="6" width="14" height="13" rx="2" fill="var(--accent-soft)" stroke="var(--accent)" />
+              <rect x="19" y="1" width="14" height="18" rx="2" fill="var(--accent-soft)" stroke="var(--accent)" />
+            </svg>
+            <span>Each box is a class. Its width is what it shows the rest of the code (public methods); its height is the code it keeps inside.</span>
+          </div>
+          <div className="hint-row">
+            <svg width="34" height="10" aria-hidden>
+              <path d="M1 5H33" stroke="var(--accent)" strokeWidth="2" />
+            </svg>
+            <span>A teal arrow is a new dependency: one class now calls another. A red dashed one was removed.</span>
+          </div>
+          <p>Hold space to see how it looked before. Click a box to open it.</p>
+        </>
+      )}
+      {level === 3 && <p>Shape compares the class before and after. Request flow shows what it calls when a request comes in. Code shows the lines that changed.</p>}
+    </div>
+  );
+}
+
+/** Hold to see the map before the change; or put before and after side by side. */
+export function Peek({ mode, onMode }: { mode: Mode; onMode(m: Mode): void }) {
+  const split = mode === "split";
+  return (
+    <div className="peek" role="group" aria-label="Before and after">
+      {!split && (
+        <button
+          className={mode === "before" ? "on" : ""}
+          onPointerDown={() => onMode("before")}
+          onPointerUp={() => onMode("after")}
+          onPointerLeave={() => mode === "before" && onMode("after")}
+          title="Hold to see before (or hold space)"
+        >
+          {mode === "before" ? "Showing before" : "Hold to see before"}
+          <kbd>space</kbd>
+        </button>
+      )}
+      <button className={split ? "on" : ""} onClick={() => onMode(split ? "after" : "split")} title="Before and after side by side (s)">
+        {split ? "Back to one map" : "Side by side"}
+        <kbd>s</kbd>
+      </button>
     </div>
   );
 }

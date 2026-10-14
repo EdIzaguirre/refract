@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import type { Comparison, LensId, LensQuestion, LensReport } from "../../src/shared/types";
 
 export const LENS_INFO: Record<LensId, { who: string; book: string; initials: string }> = {
@@ -12,18 +13,21 @@ export function LensRail({
   comparison,
   onRun,
   onTarget,
+  children,
 }: {
   report: LensReport | null;
   comparison: Comparison | null;
   onRun(): void;
   onTarget(t?: LensQuestion["target"]): void;
+  children?: ReactNode;
 }) {
   const running = report?.status === "running";
   const has = report && report.lenses.some((l) => l.questions.length);
   return (
-    <aside className="rail" aria-label="Lenses">
+    <aside className="rail" aria-label="More">
+      {children}
       <div className="rail-head">
-        <h2>Three lenses</h2>
+        <h2>What the authors think</h2>
         <button className={`btn ${has ? "" : "primary"}`} onClick={onRun} disabled={running || !comparison}>
           {running ? <span className="spinner" /> : null}
           {running ? "Asking…" : has ? "Ask again" : "Ask the lenses"}

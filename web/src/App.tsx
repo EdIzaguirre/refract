@@ -3,11 +3,11 @@ import type { Comparison, LensReport, ServerEvent, Story, Timeline } from "../..
 import { api, useEvents } from "./api";
 import { layoutMap, type MapLayout } from "./map/layout";
 import { MapView, type MapHandle } from "./map/MapView";
-import { VerdictStrip } from "./VerdictStrip";
+import { Numbers, VerdictStrip } from "./VerdictStrip";
 import { LensRail } from "./LensRail";
 import { TimelineBar } from "./TimelineBar";
 import { ClassPanel, type PanelTab } from "./ClassPanel";
-import { Legend, Crumbs } from "./MapChrome";
+import { Crumbs, Hint, Peek, useHints, type Level } from "./MapChrome";
 import { Tour } from "./tour/Tour";
 
 export type Mode = "before" | "after" | "split";
@@ -31,6 +31,8 @@ export function App() {
   const [selected, setSelected] = useState<string | null>(null);
   const [tab, setTab] = useState<PanelTab>("shape");
   const [view, setView] = useState<{ k: number; openArea: string | null }>({ k: 1, openArea: null });
+  // The numbers, the authors and the commits wait behind "More" so the map comes first.
+  const [more, setMore] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const [fresh, setFresh] = useState<string | null>(null);
   const [areasPath, setAreasPath] = useState("");
@@ -151,6 +153,8 @@ export function App() {
   const select = useCallback((name: string | null, fly = false) => {
     setSelected(name);
     if (!name) return;
+    // Every class opens on its shape; flow and code are one tab away.
+    setTab("shape");
     // Keep the class in view beside the panel that opens over the map.
     const w = stage.current?.clientWidth ?? 1200;
     const panel = Math.min(760, w * 0.62);
@@ -201,21 +205,30 @@ export function App() {
         return;
       }
       if (e.key === "t") goScreen("tour");
-      else if (e.key === " " || e.key === "b") {
+      else if (e.key === " ") {
+        // Hold space to peek at the map before the change; letting go comes back.
         e.preventDefault();
-        changeMode(mode === "after" ? "before" : "after");
+        if (!e.repeat && mode === "after") changeMode("before");
       } else if (e.key === "s") changeMode(mode === "split" ? "after" : "split");
+      else if (e.key === "m") setMore((m) => !m);
       else if (e.key === "f") map.current?.fit();
       else if (e.key === "Escape") setSelected(null);
-      else if ((e.key === "ArrowLeft" || e.key === "ArrowRight") && timeline && head) {
+      else if (more && (e.key === "ArrowLeft" || e.key === "ArrowRight") && timeline && head) {
         const i = timeline.commits.findIndex((c) => c.sha === head);
         const j = e.key === "ArrowLeft" ? Math.max(0, i - 1) : Math.min(timeline.commits.length - 1, i + 1);
         if (timeline.commits[j]) pickHead(timeline.commits[j].sha);
       }
     };
+    const onUp = (e: KeyboardEvent) => {
+      if (screen === "explore" && e.key === " " && mode === "before") changeMode("after");
+    };
     window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [mode, changeMode, timeline, head, pickHead, screen, story, stop, goScreen]);
+    window.addEventListener("keyup", onUp);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      window.removeEventListener("keyup", onUp);
+    };
+  }, [mode, changeMode, timeline, head, pickHead, screen, story, stop, goScreen, more]);
 
   // Keep the tour on the commit being shown, however the comparison arrived (scrubbing or a live commit).
   const shown = comparison?.head.sha;
@@ -249,6 +262,8 @@ export function App() {
   }, [screen, layout, select]);
 
   const selectedChange = useMemo(() => comparison?.classes.find((c) => c.name === selected) ?? null, [comparison, selected]);
+  const level: Level = selectedChange ? 3 : view.openArea ? 2 : 1;
+  const hints = useHints(level);
 
   if (error) {
     return (
@@ -265,12 +280,11 @@ export function App() {
     <div className="app">
       <VerdictStrip
         comparison={comparison}
-        mode={mode}
-        onMode={changeMode}
         screen={screen}
         onScreen={goScreen}
         watching={timeline?.watching ?? null}
-        onDelta={goTo}
+        more={more}
+        onMore={() => setMore((m) => !m)}
       />
       {screen === "tour" ? (
         <div className="main tour-main">
@@ -298,7 +312,7 @@ export function App() {
           {toast && <div className="toast">{toast}</div>}
         </div>
       ) : (
-      <div className="main">
+      <div className={`main ${more ? "" : "no-rail"}`}>
         <div className="stage" ref={stage}>
           {layout && comparison ? (
             <>
@@ -316,16 +330,23 @@ export function App() {
                 comparison={comparison}
                 openArea={view.openArea}
                 selected={selectedChange}
-                tab={tab}
                 onAreas={() => {
                   setSelected(null);
                   map.current?.fit();
                 }}
-                onArea={(id) => map.current?.flyToArea(id)}
-                onTab={setTab}
+                onArea={(id) => {
+                  setSelected(null);
+                  map.current?.flyToArea(id);
+                }}
               />
-              <Legend comparison={comparison} areasPath={areasPath} onDraft={() => api.draftAreas()} />
+              {hints.open && <Hint level={level} comparison={comparison} areasPath={areasPath} onDraft={() => api.draftAreas()} onClose={hints.close} />}
+              {level > 1 && !selectedChange && <Peek mode={mode} onMode={changeMode} />}
               <div className="map-tools">
+                {!hints.open && (
+                  <button title="What am I looking at?" onClick={hints.ask}>
+                    ?
+                  </button>
+                )}
                 <button title="Fit the whole map (f)" onClick={() => map.current?.fit()}>
                   <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6">
                     <path d="M2 6V2h4M10 2h4v4M14 10v4h-4M6 14H2v-4" />
@@ -339,6 +360,7 @@ export function App() {
                   comparison={comparison}
                   lenses={lenses}
                   head={comparison.head.sha}
+                  showLenses={more}
                   tab={tab}
                   onTab={setTab}
                   onClose={() => setSelected(null)}
@@ -357,10 +379,14 @@ export function App() {
           )}
           {toast && <div className="toast">{toast}</div>}
         </div>
-        <LensRail report={lenses} comparison={comparison} onRun={() => head && api.runLenses(head).then(setLenses)} onTarget={goTo} />
+        {more && (
+          <LensRail report={lenses} comparison={comparison} onRun={() => head && api.runLenses(head).then(setLenses)} onTarget={goTo}>
+            {comparison && <Numbers comparison={comparison} onDelta={goTo} />}
+          </LensRail>
+        )}
       </div>
       )}
-      {screen === "explore" && <TimelineBar timeline={timeline} head={head} liveHead={liveHead} fresh={fresh} onPick={pickHead} />}
+      {screen === "explore" && more && <TimelineBar timeline={timeline} head={head} liveHead={liveHead} fresh={fresh} onPick={pickHead} />}
     </div>
   );
 }

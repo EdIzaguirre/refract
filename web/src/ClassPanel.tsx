@@ -54,13 +54,12 @@ export function ClassPanel({
       <div className="tabs" role="tablist">
         {(
           [
-            ["shape", "3", "Shape"],
-            ["flow", "3", "Request flow"],
-            ["code", "4", "Code"],
+            ["shape", "Shape"],
+            ["flow", "Request flow"],
+            ["code", "Code"],
           ] as const
-        ).map(([id, n, label]) => (
+        ).map(([id, label]) => (
           <button key={id} role="tab" aria-selected={tab === id} onClick={() => onTab(id)}>
-            <span className="n">{n}</span>
             {label}
           </button>
         ))}

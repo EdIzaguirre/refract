@@ -67,6 +67,9 @@ function openBrowser(url: string) {
 
 class LiveState {
   base = "";
+  /** The branch the base was taken from (dev, main, or the left side of a range). */
+  baseFrom: string | null = null;
+  headName: string | null = null;
   head = "";
   watching: string | null = null;
   commits: Timeline["commits"] = [];
@@ -88,6 +91,8 @@ class LiveState {
   async init() {
     const range = await this.ws.range(this.opts.spec ?? this.opts.watch ?? undefined);
     this.base = range.base;
+    this.baseFrom = range.from;
+    this.headName = range.head;
     this.head = await this.ws.git.resolve(range.head);
     this.watching = this.opts.watch !== undefined ? (this.opts.watch ?? range.branch) : range.branch;
     this.commits = await this.ws.git.commitsBetween(this.base, this.head);
@@ -108,14 +113,22 @@ class LiveState {
     return { base: this.base, commits: this.commits, watching: this.watching, quietSeconds: this.opts.quietSeconds };
   }
 
+  private async baseTip(): Promise<string | null> {
+    return this.baseFrom ? this.ws.git.tryResolve(this.baseFrom) : null;
+  }
+
   compare(head: string): Promise<Comparison> {
     const key = `${this.base}:${head}`;
     let c = this.comparisons.get(key);
     if (!c) {
       c = this.ws.compare(this.base, head).then((x) => {
-        x.base.ref = this.opts.spec?.includes("..") ? this.opts.spec.split("..")[0] : "base";
-        x.head.ref = this.watching ?? x.head.short;
-        return x;
+        x.base.ref = this.baseFrom ?? "base";
+        x.head.ref = this.watching ?? this.headName ?? x.head.short;
+        return this.baseTip().then((tip) => {
+          // The base is either the branch's own tip or, more often, the commit where head last met it.
+          x.base.atTip = tip === x.base.sha;
+          return x;
+        });
       });
       c.catch(() => this.comparisons.delete(key));
       this.comparisons.set(key, c);

@@ -243,7 +243,8 @@ export interface CommitInfo {
 
 export interface Comparison {
   repo: { name: string; root: string };
-  base: CommitInfo & { ref: string };
+  /** atTip: the base commit is still the tip of `ref`, not an older commit where head last met it. */
+  base: CommitInfo & { ref: string; atTip?: boolean };
   head: CommitInfo & { ref: string };
   verdict: { label: string; tone: Tone; summary: string; good: number; bad: number; ask: number };
   deltas: Delta[];

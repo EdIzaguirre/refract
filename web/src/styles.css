@@ -460,3 +460,34 @@ a { color: var(--accent); }
 .modal-trail-path button.here { color: var(--ink); font-weight: 600; text-decoration: none; }
 .modal:has(.modal-trail) .panel { top: 48px; }
 .modal:has(.modal-trail) .modal-map { top: 60px; }
+
+/* Explore, opened one level at a time */
+.btn.more.on { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+.area-cover:not(.changed) { fill: var(--paper); stroke: var(--rule); stroke-dasharray: 4 4; }
+.area-cover:not(.changed) + .area-title { fill: var(--muted); }
+.start-here rect { fill: var(--accent); }
+.start-here text { fill: var(--surface); font-size: 12px; font-weight: 600; letter-spacing: 0.02em; }
+.start-here { animation: bob 2.4s ease-in-out infinite; }
+@keyframes bob { 0%, 100% { opacity: 1; } 50% { opacity: 0.55; } }
+.area-cover.start { stroke-width: 2.5; }
+.hint { position: absolute; left: 14px; bottom: 14px; z-index: 4; max-width: 340px; background: var(--surface); border: 1px solid var(--rule); border-radius: 12px; padding: 12px 14px 10px; box-shadow: var(--shadow); font-size: 0.82rem; line-height: 1.45; color: var(--ink); animation: rise 0.2s ease-out; }
+.hint p { margin: 0 0 6px; }
+.hint .x { position: absolute; top: 6px; right: 8px; border: 0; background: transparent; cursor: pointer; color: var(--faint); font-size: 1rem; }
+.hint-q { font-family: var(--font-display); font-weight: 600; font-size: 0.95rem; margin-bottom: 6px; }
+.hint-row { display: grid; grid-template-columns: 34px 1fr; gap: 10px; align-items: center; margin-bottom: 6px; }
+.hint-src { color: var(--muted); font-size: 0.75rem; }
+.hint button.link { border: 0; background: transparent; padding: 0; color: var(--accent); cursor: pointer; text-decoration: underline; font: inherit; }
+@keyframes rise { from { transform: translateY(6px); opacity: 0; } }
+.peek { position: absolute; left: 50%; bottom: 16px; transform: translateX(-50%); z-index: 3; display: flex; gap: 6px; }
+.peek button { border: 1px solid var(--rule); background: var(--surface); border-radius: 999px; padding: 6px 14px; cursor: pointer; font-size: 0.82rem; color: var(--ink); box-shadow: var(--shadow); display: inline-flex; gap: 8px; align-items: center; user-select: none; touch-action: none; }
+.peek button.on { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+.peek kbd { font-family: var(--font-mono); font-size: 0.68rem; opacity: 0.6; }
+.map-tools button { font-weight: 600; color: var(--muted); }
+.numbers { display: grid; gap: 10px; padding-bottom: 6px; border-bottom: 1px solid var(--rule); }
+.numbers h2 { font-family: var(--font-display); font-weight: 600; font-size: 1.2rem; margin: 0; }
+.numbers .verdict-line { flex-wrap: wrap; gap: 4px 10px; }
+.numbers .deltas { display: grid; gap: 8px; overflow: visible; }
+.numbers .delta { max-width: none; min-width: 0; }
+.numbers .delta .what { white-space: normal; }
+.refs .sha { color: var(--faint); margin-left: -4px; }
+.refs .met { font-family: var(--font-body); font-size: 0.74rem; color: var(--muted); font-style: italic; }

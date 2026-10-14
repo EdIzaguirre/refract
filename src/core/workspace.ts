@@ -73,24 +73,29 @@ export class Workspace {
     return c;
   }
 
-  /** Resolves "a..b", "b" (against the default branch), or nothing (current branch). */
-  async range(spec?: string): Promise<{ base: string; head: string; branch: string | null }> {
+  /**
+   * Resolves "a..b", "b" (against the default branch), or nothing (current branch).
+   * `from` names the branch the base commit was taken from, for the header.
+   */
+  async range(spec?: string): Promise<{ base: string; head: string; branch: string | null; from: string | null }> {
     if (spec && spec.includes("..")) {
       const [b, h] = spec.split(/\.\.\.?/);
       const head = h || "HEAD";
       const base = (await this.git.mergeBase(b, head)) ?? b;
-      return { base, head, branch: (await this.git.tryResolve(`refs/heads/${head}`)) ? head : null };
+      return { base, head, branch: (await this.git.tryResolve(`refs/heads/${head}`)) ? head : null, from: b };
     }
     const head = spec || (await this.git.currentBranch()) || "HEAD";
     const main = await this.git.defaultBranch();
     let base: string | null = null;
+    let from: string | null = null;
     if (main) {
       base = await this.git.mergeBase(main, head);
+      from = main;
       const headSha = await this.git.resolve(head);
-      if (base === headSha) base = null; // Head is on the default branch: show its last commit.
+      if (base === headSha) base = from = null; // Head is on the default branch: show its last commit.
     }
     base ??= (await this.git.tryResolve(`${head}~1`)) ?? head;
-    return { base, head, branch: (await this.git.tryResolve(`refs/heads/${head}`)) ? head : null };
+    return { base, head, branch: (await this.git.tryResolve(`refs/heads/${head}`)) ? head : null, from };
   }
 }
 
