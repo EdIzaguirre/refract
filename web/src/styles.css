@@ -519,3 +519,30 @@ a { color: var(--accent); }
 .hist-name { font-family: var(--font-mono); font-size: 11px; fill: var(--muted); }
 .hist-note { font-family: var(--font-body); font-size: 11px; fill: var(--muted); }
 .hist-note.accent { fill: var(--accent); }
+
+/* ---------- plans ---------- */
+.cls.planned rect.box { stroke-dasharray: 5 3; }
+.edge.planned { stroke-dasharray: 6 4; }
+.fig-box.planned rect { stroke-dasharray: 5 3; fill: var(--accent-soft); }
+.fig-edge.planned { stroke-dasharray: 6 4; }
+.product.planned .tbl.added rect, .product.planned .tbl.changed rect { stroke-dasharray: 5 3; }
+.planned-note { font-size: 0.85rem; color: var(--muted); margin: 0; }
+.plan-tag { font-family: var(--font-mono); font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.06em; border: 1px dashed var(--accent); color: var(--accent); border-radius: 4px; padding: 1px 6px; }
+.plan-check { display: grid; gap: 18px; }
+.plan-group { display: grid; gap: 8px; }
+.plan-group h3 { margin: 6px 0 0; font-family: var(--font-display); font-weight: 500; font-size: 1.3rem; display: flex; align-items: baseline; gap: 10px; }
+.plan-group h3 .n { font-family: var(--font-mono); font-size: 0.8rem; color: var(--muted); }
+.plan-group .sub { margin: -4px 0 0; font-size: 0.85rem; color: var(--muted); }
+.plan-items { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.plan-items li > button, .plan-items li > div { width: 100%; text-align: left; font: inherit; color: inherit; display: grid; grid-template-columns: 92px 1fr; gap: 10px; align-items: baseline; background: var(--surface); border: 1px solid var(--rule); border-radius: 8px; padding: 8px 12px; }
+.plan-items li > button { cursor: pointer; }
+.plan-items li > button:hover { border-color: var(--accent); }
+.plan-items .where { font-family: var(--font-mono); font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
+.plan-items .what { display: grid; gap: 2px; }
+.plan-items .detail { font-size: 0.82rem; color: var(--muted); }
+.plan-group.surprise li > * { border-left: 3px solid var(--ask); }
+.plan-group.missing li > * { border-left: 3px solid var(--bad); }
+.plan-group.different li > * { border-left: 3px solid var(--ask); border-left-style: dashed; }
+.plan-group.built li > * { border-left: 3px solid var(--good); }
+.stop-num.plan svg { display: block; }
+.plan-problems { margin: 0; padding-left: 18px; }

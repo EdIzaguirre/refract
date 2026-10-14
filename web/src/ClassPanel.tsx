@@ -108,7 +108,9 @@ function ShapeTab({ c, comparison, lenses, onGo }: { c: ClassChange; comparison:
                     strokeWidth={1.5}
                   />
                   <text x={10} y={H + 30}>
-                    {s.interface} public × {s.codeLines} lines · {Math.round(s.codeLines / Math.max(1, s.interface))} per public method
+                    {side === "after" && c.sizeUnknown
+                      ? `${s.interface} public · planned, so its size waits for real code`
+                      : `${s.interface} public × ${s.codeLines} lines · ${Math.round(s.codeLines / Math.max(1, s.interface))} per public method`}
                   </text>
                 </svg>
               ) : (
@@ -118,7 +120,12 @@ function ShapeTab({ c, comparison, lenses, onGo }: { c: ClassChange; comparison:
           );
         })}
       </div>
-      {b && a && (
+      {b && a && c.planned && (
+        <p className="rail-note" style={{ margin: 0 }}>
+          {a.interface > b.interface ? `The plan widens its interface by ${a.interface - b.interface}.` : "The plan keeps its interface as it is."}
+        </p>
+      )}
+      {b && a && !c.planned && (
         <p className="rail-note" style={{ margin: 0 }}>
           {a.interface > b.interface ? `The interface grew by ${a.interface - b.interface}. ` : a.interface < b.interface ? `The interface shrank by ${b.interface - a.interface}. ` : "Same interface. "}
           {a.codeLines !== b.codeLines ? `The code ${a.codeLines > b.codeLines ? "grew" : "shrank"} by ${Math.abs(a.codeLines - b.codeLines)} lines.` : "Same amount of code."}
@@ -241,7 +248,7 @@ function actorName(name: string): string {
   return lines.join("<br/>").replace(/[;#"]/g, " ");
 }
 
-function toMermaid(seq: Sequence): string {
+export function toMermaid(seq: Sequence): string {
   const id = new Map(seq.participants.map((p, i) => [p, `p${i}`]));
   const label = (s: string) => s.replace(/[;:#"]/g, " ");
   const lines = ["sequenceDiagram"];
@@ -333,6 +340,8 @@ function CodeTab({ c, head }: { c: ClassChange; head: string }) {
   const [diff, setDiff] = useState<string | null>(null);
   useEffect(() => {
     let stale = false;
+    // A planned class has no code to diff yet.
+    if (c.planned) return setDiff("");
     api.diff(head, c.paths).then((d) => !stale && setDiff(d.diff));
     return () => {
       stale = true;
@@ -354,7 +363,7 @@ function CodeTab({ c, head }: { c: ClassChange; head: string }) {
               const cls = m.status === "added" ? "add" : m.status === "removed" ? "del" : "";
               const sign = m.status === "added" ? "+" : m.status === "removed" ? "-" : " ";
               const v = (m.after ?? m.before)!;
-              const lines = m.before && m.after ? `${m.before.codeLines} → ${m.after.codeLines} lines` : `${v.codeLines} lines`;
+              const lines = c.planned && m.status === "added" ? `planned, ${v.params} parameter${v.params === 1 ? "" : "s"}` : m.before && m.after ? `${m.before.codeLines} → ${m.after.codeLines} lines` : `${v.codeLines} lines`;
               return (
                 <span key={`${m.scope}${m.name}`} className={cls}>
                   {sign} {v.visibility !== "public" ? `${v.visibility} ` : ""}
@@ -369,7 +378,13 @@ function CodeTab({ c, head }: { c: ClassChange; head: string }) {
       </div>
       <div>
         <h3>Line by line</h3>
-        {diff === null ? <div className="skeleton" /> : diff ? <CodeDiff diff={diff} /> : <p className="rail-note">No line changes in this class's files.</p>}
+        {diff === null ? (
+          <div className="skeleton" />
+        ) : diff ? (
+          <CodeDiff diff={diff} />
+        ) : (
+          <p className="rail-note">{c.planned ? "No code yet: this is what the plan says the class will offer." : "No line changes in this class's files."}</p>
+        )}
       </div>
     </>
   );

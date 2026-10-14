@@ -181,6 +181,10 @@ export interface ClassChange {
   nested: string[];
   before: ClassUnit | null;
   after: ClassUnit | null;
+  /** In a plan preview: the plan adds or reshapes this class. */
+  planned?: boolean;
+  /** A planned class has no code yet, so its height (lines of code) is a placeholder. */
+  sizeUnknown?: boolean;
 }
 
 export interface EdgeChange {
@@ -190,6 +194,8 @@ export interface EdgeChange {
   status: "added" | "removed" | "unchanged";
   before: number;
   after: number;
+  /** In a plan preview: a dependency the plan adds. */
+  planned?: boolean;
 }
 
 export interface AreaChange {
@@ -261,6 +267,10 @@ export interface Comparison {
   generatedAt: string;
   /** Filled in by the workspace after the class comparison: what the change does to the product. */
   product?: ProductChanges;
+  /** Set when a plan is involved: drawn as the "after" (preview) or checked against the build (check). */
+  plan?: PlanInfo;
+  /** In check mode: the plan laid beside what the branch built. */
+  planCheck?: PlanCheck;
 }
 
 // ---------- lenses ----------
@@ -316,6 +326,8 @@ export interface StoryStop {
   tone: Tone;
   /** Classes to draw, exact names from the comparison. The first is the one the stop is about. */
   classes: string[];
+  /** A request to draw as a sequence diagram under the boxes: a planned flow's entry. */
+  flow?: { cls: string; method: string };
 }
 
 export interface Story {
@@ -454,4 +466,42 @@ export interface LifecycleChange {
   after: string[];
   /** "from → to" moves, when the model lists them. */
   moves: { from: string; to: string; status: ChangeStatus }[];
+}
+
+// ---------- plans ----------
+
+/** Which plan a comparison involves, and how. */
+export interface PlanInfo {
+  /** "preview": the plan drawn as the after side. "check": the build compared with the plan. */
+  mode: "preview" | "check";
+  name: string;
+  title: string;
+  why?: string;
+  file: string;
+  /** Changes whenever the file does, so caches keyed on it go stale with it. */
+  hash: string;
+  /** Lines in the file Refract could not read, in plain words. */
+  problems: string[];
+}
+
+export type PlanSection = "tables" | "lifecycles" | "screens" | "permissions" | "jobs" | "classes" | "flows";
+
+/**
+ * built: the plan asked for it and it is there. missing: planned, not built.
+ * surprise: built, not in the plan. different: built, but not the way the plan said.
+ */
+export type PlanStatus = "built" | "missing" | "surprise" | "different";
+
+export interface PlanItem {
+  section: PlanSection;
+  status: PlanStatus;
+  /** One plain line, like "fees table" or "TimesheetCharges grew revise and set_included". */
+  text: string;
+  detail?: string;
+  /** Where the line opens: a class pop-up, or a part of the product page. */
+  target?: { kind: "class"; name: string; method?: string } | { kind: "product"; part: ProductPart; name: string };
+}
+
+export interface PlanCheck {
+  items: PlanItem[];
 }

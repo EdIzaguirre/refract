@@ -386,7 +386,7 @@ function Edges({ layout, p, open, selected, index }: { layout: MapLayout; p: num
           <path
             key={e.key}
             d={e.path}
-            className={`edge ${status} ${e.edge.kind === "inherits" ? "inherits" : ""} ${hl ? "hl" : ""}`}
+            className={`edge ${status} ${e.edge.kind === "inherits" ? "inherits" : ""} ${e.edge.planned ? "planned" : ""} ${hl ? "hl" : ""}`}
             opacity={o * alpha * (selected && !hl ? 0.25 : status === "unchanged" ? 0.7 : 1)}
             markerEnd={`url(#arrow-${marker}${index})`}
           />
@@ -478,7 +478,7 @@ function ClassBox({
 
   return (
     <g
-      className={`cls ${cls} ${selected ? "selected" : ""} ${dim ? "dim" : ""}`}
+      className={`cls ${cls} ${c.planned ? "planned" : ""} ${selected ? "selected" : ""} ${dim ? "dim" : ""}`}
       opacity={opacity * Math.max(open, 0.15)}
       onPointerEnter={() => open > 0.5 && onHover(c.name)}
       onPointerLeave={() => onHover(null)}
@@ -487,7 +487,7 @@ function ClassBox({
         onSelect(c.name);
       }}
     >
-      <title>{`${c.name} (${c.status})\n${shape?.interface ?? 0} public methods · ${shape?.codeLines ?? 0} code lines${c.descendants ? `\ninherited by ${c.descendants}` : ""}`}</title>
+      <title>{`${c.name} (${c.planned ? `planned, ${c.status === "added" ? "new" : "reshaped"}` : c.status})\n${shape?.interface ?? 0} public methods · ${c.sizeUnknown ? "size unknown until there is code" : `${shape?.codeLines ?? 0} code lines`}${c.descendants ? `\ninherited by ${c.descendants}` : ""}`}</title>
       <rect className="box" x={r.x} y={r.y} width={Math.max(r.w, 1)} height={Math.max(r.h, 1)} rx={3} />
       {prev && <rect className="prev" x={prev.x} y={prev.y} width={prev.w} height={prev.h} rx={3} opacity={(p - 0.5) * 2} />}
       {showLabel && (

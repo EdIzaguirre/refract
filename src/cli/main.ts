@@ -11,6 +11,8 @@ Usage
   refract lenses [range]     ask the Metz, Ousterhout and Copeland lenses about the change
   refract trace [range]      trace request flows by running the tests that touch the change
   refract install-command    add the /refract command to Claude Code
+  refract --plan <name>      draw a plan against today's code, before the branch exists
+  refract plan check [name]  the plan against what the branch built (plan path, format, context too)
 
 Ranges
   (none)        the current branch against where it left the default branch
@@ -21,6 +23,10 @@ Options
   --port <n>    server port (default 4100)
   --no-open     do not open a browser
   --repo <dir>  repository to look at (default: current directory)
+  --plan <name> with a range, check the branch against this plan instead of its own
+
+Plans live at ~/.refract/<repo>/plans/<branch>.yml. A branch with a plan opens on
+its Plan check; /refract plan in Claude Code drafts one from the conversation.
 `;
 
 interface Args {
@@ -37,12 +43,12 @@ function parse(argv: string[]): Args {
     if (a.startsWith("--")) {
       const [k, v] = a.slice(2).split("=");
       if (v !== undefined) flags[k] = v;
-      else if (["port", "repo", "base", "quiet"].includes(k)) flags[k] = argv[++i];
+      else if (["port", "repo", "base", "quiet", "plan"].includes(k)) flags[k] = argv[++i];
       else flags[k] = true;
     } else if (a === "-h") flags.help = true;
     else positional.push(a);
   }
-  const commands = ["watch", "diff", "areas", "lenses", "trace", "install-command", "serve", "help"];
+  const commands = ["watch", "diff", "areas", "lenses", "trace", "plan", "install-command", "serve", "help"];
   const command = positional[0] && commands.includes(positional[0]) ? positional.shift()! : "serve";
   return { command, positional, flags };
 }
@@ -75,6 +81,11 @@ async function main() {
       await runAreasCommand(ws, spec, Boolean(args.flags.draft));
       return;
     }
+    case "plan": {
+      const { runPlanCommand } = await import("./plan-command.js");
+      await runPlanCommand(ws, args.positional, args.flags);
+      return;
+    }
     case "lenses": {
       const { base, head } = await ws.range(spec);
       const { runLenses } = await import("../core/lenses.js");
@@ -102,6 +113,7 @@ async function main() {
         port: Number(args.flags.port ?? process.env.REFRACT_PORT ?? 4100),
         open: !args.flags["no-open"],
         quietSeconds: Number(args.flags.quiet ?? 180),
+        plan: typeof args.flags.plan === "string" ? args.flags.plan : undefined,
       });
       return;
     }

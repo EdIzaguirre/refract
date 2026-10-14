@@ -1,10 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
-import { ClassPanel, type PanelTab } from "../ClassPanel";
-import type { Comparison, LensId, LensQuestion, LensReport, Story } from "../../../src/shared/types";
+import { ClassPanel, toMermaid, type PanelTab } from "../ClassPanel";
+import { Mermaid } from "../Mermaid";
+import { api } from "../api";
+import type { Comparison, LensId, LensQuestion, LensReport, Sequence, Story } from "../../../src/shared/types";
 import { StopDiagram, shortName } from "./StopDiagram";
 import { MethodCode, resolveTarget } from "./MethodCode";
 import { LENS_INFO } from "../LensRail";
 import { ProductPage, hasProduct, productCounts } from "./Product";
+import { PlanCheckPage, planCounts } from "./PlanCheck";
 
 interface Note {
   lens: LensId;
@@ -44,14 +47,29 @@ export function Tour({
   // Each key change carries the one sharpest question from the books; the books' overall take,
   // where they disagree and every other question live on one page after the key changes.
   const picks = useMemo(() => pickQuestions(lenses, stops), [lenses, stops]);
-  // Pages: what changed in the product (when anything did), the key changes, then the books.
+  // Pages: the plan check (when the branch has a plan), what changed in the product (when anything
+  // did), the key changes, then the books.
+  const preview = c.plan?.mode === "preview";
+  const C = c.planCheck ? 1 : 0;
   const P = hasProduct(c.product) ? 1 : 0;
-  const pages = P + stops.length + (stops.length ? 1 : 0);
+  const lead = C + P;
+  const pages = lead + stops.length + (stops.length ? 1 : 0);
   const page = Math.min(stop, Math.max(0, pages - 1));
-  const onProduct = P === 1 && page === 0;
-  const i = page - P;
+  const onCheck = C === 1 && page === 0;
+  const onProduct = P === 1 && page === C;
+  const i = page - lead;
   const current = i >= 0 ? stops[i] : undefined;
-  const onBooks = !onProduct && !current && stops.length > 0 && i === stops.length;
+  const onBooks = !onProduct && !onCheck && !current && stops.length > 0 && i === stops.length;
+  // A plan check line about a table or a screen opens the product page at that part.
+  const [scrollTo, setScrollTo] = useState<string | null>(null);
+  useEffect(() => {
+    if (!scrollTo || !onProduct) return;
+    const t = setTimeout(() => {
+      document.getElementById(`product-${scrollTo}`)?.scrollIntoView({ behavior: "smooth", block: "start" });
+      setScrollTo(null);
+    }, 120);
+    return () => clearTimeout(t);
+  }, [scrollTo, onProduct]);
   // Clicking a box opens that class's panel over the summary, without leaving it. Following a
   // dependency inside the panel keeps a trail, so Back and Forward work like a browser's.
   const [trail, setTrail] = useState<{ names: string[]; at: number }>({ names: [], at: -1 });
@@ -84,29 +102,44 @@ export function Tour({
   return (
     <div className="tour">
       <aside className="tour-nav">
-        <div className="kicker">What this change does</div>
+        <div className="kicker">{preview ? "What this plan does" : "What this change does"}</div>
         <h1 className="tour-summary">{story?.summary ?? c.verdict.summary}</h1>
+        {C === 1 && (
+          <ol className="tour-stops product-link">
+            <li>
+              <button aria-current={onCheck} onClick={() => onStop(0)}>
+                <span className="stop-num plan">
+                  <PlanIcon />
+                </span>
+                <span className="stop-title">
+                  Plan check
+                  <span className="stop-sub">{planCounts(c)}</span>
+                </span>
+              </button>
+            </li>
+          </ol>
+        )}
         {P === 1 && (
           <ol className="tour-stops product-link">
             <li>
-              <button aria-current={onProduct} onClick={() => onStop(0)}>
+              <button aria-current={onProduct} onClick={() => onStop(C)}>
                 <span className="stop-num flat">
                   <TableIcon />
                 </span>
                 <span className="stop-title">
-                  What changed in the product
+                  {preview ? "What the plan changes in the product" : "What changed in the product"}
                   <span className="stop-sub">{productCounts(c.product!).slice(0, 3).map((x) => x.text).join(" · ")}</span>
                 </span>
               </button>
             </li>
           </ol>
         )}
-        {stops.length > 0 && <div className="kicker">How the code changed</div>}
-        {stops.length > 0 && <Verdict stops={stops} />}
+        {stops.length > 0 && <div className="kicker">{preview ? "How the code would change" : "How the code changed"}</div>}
+        {stops.length > 0 && !preview && <Verdict stops={stops} />}
         <ol className="tour-stops">
           {stops.map((s, j) => (
             <li key={s.id}>
-              <button aria-current={j === i} onClick={() => onStop(P + j)}>
+              <button aria-current={j === i} onClick={() => onStop(lead + j)}>
                 <span className={`stop-num ${s.tone}`}>{j + 1}</span>
                 <span className="stop-title">{s.title}</span>
               </button>
@@ -116,7 +149,7 @@ export function Tour({
         {stops.length > 0 && (
           <ol className="tour-stops books-link">
             <li>
-              <button aria-current={onBooks} onClick={() => onStop(P + stops.length)}>
+              <button aria-current={onBooks} onClick={() => onStop(lead + stops.length)}>
                 <span className="stop-num flat">
                   <BookIcon />
                 </span>
@@ -126,7 +159,7 @@ export function Tour({
           </ol>
         )}
         <div className="tour-source">
-          {story?.status === "running" ? (
+          {preview ? null : story?.status === "running" ? (
             <>
               <span className="spinner small" /> Claude Code is writing a plainer version of this summary.
             </>
@@ -136,7 +169,25 @@ export function Tour({
             </button>
           )}
         </div>
-        {story && (
+        {preview && (
+          <details className="how made">
+            <summary>How this preview was made</summary>
+            <p>
+              Nothing is built yet. Refract read the plan in <code>{c.plan!.file}</code> and laid it over today's code: new classes, methods, dependencies and calls go on top of what is there now, and new tables and states go on top of today's schema and models. Dashed outlines are planned. A planned class's width is its planned public methods; its height waits for real code. Edit the plan and this page follows.
+            </p>
+            {c.plan!.problems.length > 0 && (
+              <div className="callout">
+                Refract could not read {c.plan!.problems.length === 1 ? "one line" : `${c.plan!.problems.length} lines`} of the plan:
+                <ul className="plan-problems">
+                  {c.plan!.problems.map((p, k) => (
+                    <li key={k}>{p}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </details>
+        )}
+        {story && !preview && (
           <details className="how made">
             <summary>How this summary was made</summary>
             {story.source === "claude" ? (
@@ -157,13 +208,26 @@ export function Tour({
       </aside>
 
       <section className="tour-stage">
-        {onProduct ? (
-          <ProductPage product={c.product!} story={story} onNext={() => onStop(1)} />
+        {onCheck ? (
+          <PlanCheckPage
+            comparison={c}
+            onClass={openClass}
+            onProduct={(part) => {
+              if (P) {
+                setScrollTo(part);
+                onStop(C);
+              }
+            }}
+            onNext={pages > 1 ? () => onStop(1) : undefined}
+            nextLabel={P ? "What changed in the product" : "How the code changed"}
+          />
+        ) : onProduct ? (
+          <ProductPage product={c.product!} story={story} planned={preview} onNext={() => onStop(C + 1)} />
         ) : current ? (
           <article className="stop" key={`${story?.source}-${current.id}`}>
             <div className="stop-meta">
               Change {i + 1} of {stops.length}
-              <span className={`pill ${current.tone}`}>{TONE_WORD[current.tone]}</span>
+              <span className={`pill ${current.tone}`}>{preview ? "Planned" : TONE_WORD[current.tone]}</span>
             </div>
             <h2 className="stop-heading">{current.title}</h2>
             <p className="stop-explain">{current.explain}</p>
@@ -175,6 +239,7 @@ export function Tour({
             <p className="stop-look">
               <EyeIcon /> {current.look}
             </p>
+            {current.flow && <FlowFigure head={c.head.sha} flow={current.flow} />}
             {picks.byStop[i] && <BookLine comparison={c} note={picks.byStop[i]!} onOpen={openClass} />}
             <footer className="stop-foot">
               <button className="btn" disabled={page === 0} onClick={() => onStop(page - 1)}>
@@ -506,6 +571,34 @@ function BookIcon() {
     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
       <path d="M4 5a2 2 0 0 1 2-2h13v16H6a2 2 0 0 0-2 2z" />
       <path d="M4 19V5" />
+    </svg>
+  );
+}
+
+/** A planned request as a sequence diagram, read from the planned calls. */
+function FlowFigure({ head, flow }: { head: string; flow: { cls: string; method: string } }) {
+  const [seq, setSeq] = useState<Sequence | null>(null);
+  useEffect(() => {
+    let stale = false;
+    api.sequence(head, "after", flow.cls, flow.method).then((s) => !stale && setSeq(s)).catch(() => {});
+    return () => {
+      stale = true;
+    };
+  }, [head, flow.cls, flow.method]);
+  if (!seq) return <div className="figure-loading">Drawing…</div>;
+  return (
+    <div className="seq">
+      <Mermaid text={toMermaid(seq)} />
+    </div>
+  );
+}
+
+function PlanIcon() {
+  return (
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
+      <path d="M9 4h6v3H9z" />
+      <path d="M7 5H5v16h14V5h-2" />
+      <path d="m8.5 14 2.5 2.5 5-5" />
     </svg>
   );
 }
