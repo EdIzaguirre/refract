@@ -1,4 +1,5 @@
-import type { Comparison, Delta } from "../../src/shared/types";
+import type { Comparison, Delta, Timeline } from "../../src/shared/types";
+import { RangeLine } from "./RangeLine";
 import type { Screen } from "./App";
 
 export function Logo() {
@@ -18,6 +19,7 @@ export function VerdictStrip({
   screen,
   onScreen,
   watching,
+  timeline,
   more,
   onMore,
 }: {
@@ -25,6 +27,7 @@ export function VerdictStrip({
   screen: Screen;
   onScreen(s: Screen): void;
   watching: string | null;
+  timeline: Timeline | null;
   more: boolean;
   onMore(): void;
 }) {
@@ -36,17 +39,9 @@ export function VerdictStrip({
           Refract
         </div>
         {c && (
-          <div className="refs" title={rangeText(c)}>
+          <div className="refs">
             <span>{c.repo.name}</span>
-            <b>
-              {watching && <span className="live-dot" title={`Watching ${watching} for new commits`} />}
-              {refName(c.head)}
-            </b>
-            {refName(c.head) !== c.head.short && <span className="sha">{c.head.short}</span>}
-            <span>vs</span>
-            <b>{refName(c.base)}</b>
-            {refName(c.base) !== c.base.short && <span className="sha">{c.base.short}</span>}
-            {c.base.atTip === false && <span className="met">where they last met</span>}
+            <RangeLine comparison={c} timeline={timeline} watching={watching} />
           </div>
         )}
         <div className="spacer" />
@@ -92,21 +87,4 @@ export function Numbers({ comparison: c, onDelta }: { comparison: Comparison; on
       </div>
     </section>
   );
-}
-
-/** Says in words which two commits are compared, and why the base is the one it is. */
-function rangeText(c: Comparison): string {
-  const head = refName(c.head);
-  const base = refName(c.base);
-  const lines = [`Comparing ${head === c.head.short ? c.head.short : `the tip of ${head} (${c.head.short})`}: ${c.head.subject}`];
-  if (c.base.atTip === false)
-    lines.push(`against ${c.base.short}, the commit where ${head} last met ${base}: ${c.base.subject}`, `Anything ${head} took in from ${base} is on both sides, so only the branch's own work shows.`);
-  else lines.push(`against ${base === c.base.short ? c.base.short : `the tip of ${base} (${c.base.short})`}: ${c.base.subject}`);
-  lines.push(`${c.stats.files} files changed, +${c.stats.additions} −${c.stats.deletions}`);
-  return lines.join("\n");
-}
-
-/** A branch name reads better than a SHA; fall back to the short SHA when the ref is one. */
-function refName(r: Comparison["head"]): string {
-  return !r.ref || /^[0-9a-f]{7,40}$/i.test(r.ref) || r.ref === "HEAD" ? r.short : r.ref.replace(/^origin\//, "");
 }

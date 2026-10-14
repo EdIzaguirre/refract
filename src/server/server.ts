@@ -4,7 +4,7 @@ import { existsSync } from "node:fs";
 import path from "node:path";
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
-import type { Comparison, FlowReport, LensReport, ServerEvent, Story, Timeline } from "../shared/types.js";
+import type { BranchHistory, Comparison, FlowReport, LensReport, ServerEvent, Story, Timeline } from "../shared/types.js";
 import { cachedLenses, runLenses } from "../core/lenses.js";
 import { cachedFlows, sequenceFor, traceFlows } from "../core/flows.js";
 import { draftAreas } from "../core/draft-areas.js";
@@ -69,6 +69,7 @@ class LiveState {
   base = "";
   /** The branch the base was taken from (dev, main, or the left side of a range). */
   baseFrom: string | null = null;
+  history: BranchHistory | undefined;
   headName: string | null = null;
   head = "";
   watching: string | null = null;
@@ -96,6 +97,7 @@ class LiveState {
     this.head = await this.ws.git.resolve(range.head);
     this.watching = this.opts.watch !== undefined ? (this.opts.watch ?? range.branch) : range.branch;
     this.commits = await this.ws.git.commitsBetween(this.base, this.head);
+    await this.readHistory();
     this.setStatus(`Measuring ${this.commits.length} commit${this.commits.length === 1 ? "" : "s"}`);
     await this.compare(this.head);
     this.setStatus("Ready");
@@ -110,7 +112,26 @@ class LiveState {
   }
 
   timeline(): Timeline {
-    return { base: this.base, commits: this.commits, watching: this.watching, quietSeconds: this.opts.quietSeconds };
+    return { base: this.base, history: this.history, commits: this.commits, watching: this.watching, quietSeconds: this.opts.quietSeconds };
+  }
+
+  /** Which commit of which branch "before" is, how far that branch has moved since, and where it was merged in. */
+  private async readHistory() {
+    if (!this.baseFrom) return (this.history = undefined);
+    const git = this.ws.git;
+    const tip = await git.tryResolve(this.baseFrom);
+    const merges: string[] = [];
+    for (const c of this.commits) {
+      const from = c.parents?.[1];
+      if (from && tip && (await git.isAncestor(from, tip))) merges.push(c.sha);
+    }
+    this.history = {
+      baseRef: /^[0-9a-f]{7,40}$/i.test(this.baseFrom) ? this.baseFrom.slice(0, 9) : this.baseFrom.replace(/^origin\//, ""),
+      base: await git.commit(this.base),
+      baseAtTip: tip === this.base,
+      baseAhead: tip ? await git.count(`${this.base}..${tip}`) : 0,
+      merges,
+    };
   }
 
   private async baseTip(): Promise<string | null> {
@@ -242,6 +263,7 @@ class LiveState {
     this.head = sha;
     this.lastCommitAt = Date.now();
     this.commits = await this.ws.git.commitsBetween(this.base, sha);
+    await this.readHistory();
     if (prevBase !== this.base) this.setStatus(`${ref} was rebased onto a new base`);
     this.broadcast({ type: "timeline", payload: this.timeline() });
     const c = await this.compare(sha);

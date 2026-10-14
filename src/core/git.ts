@@ -79,16 +79,24 @@ export class Git {
       "--first-parent",
       "--reverse",
       `--max-count=${limit}`,
-      "--format=%H%x00%h%x00%s%x00%an%x00%aI",
+      "--format=%H%x00%h%x00%s%x00%an%x00%aI%x00%P",
       `${base}..${head}`,
     ]);
     return out
       .split("\n")
       .filter(Boolean)
       .map((line) => {
-        const [sha, short, subject, author, date] = line.split("\0");
-        return { sha, short, subject, author, date };
+        const [sha, short, subject, author, date, parents] = line.split("\0");
+        return { sha, short, subject, author, date, parents: parents ? parents.split(" ") : [] };
       });
+  }
+
+  async isAncestor(a: string, b: string): Promise<boolean> {
+    return (await this.tryGit(["merge-base", "--is-ancestor", a, b])) !== null;
+  }
+
+  async count(range: string): Promise<number> {
+    return Number((await this.tryGit(["rev-list", "--count", range]))?.trim() ?? 0);
   }
 
   /** Every file at a commit, with its blob id. */

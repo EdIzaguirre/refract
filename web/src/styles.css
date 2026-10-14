@@ -491,3 +491,31 @@ a { color: var(--accent); }
 .numbers .delta .what { white-space: normal; }
 .refs .sha { color: var(--faint); margin-left: -4px; }
 .refs .met { font-family: var(--font-body); font-size: 0.74rem; color: var(--muted); font-style: italic; }
+.range { position: relative; }
+.range-line { border: 1px solid transparent; background: transparent; border-radius: 8px; padding: 3px 8px; cursor: pointer; font: inherit; font-family: var(--font-body); font-size: 0.84rem; color: var(--muted); display: inline-flex; align-items: center; gap: 6px; }
+.range-line:hover, .range-line[aria-expanded="true"] { border-color: var(--rule); background: var(--surface); }
+.range-line b { color: var(--ink); font-weight: 600; }
+.range-when { color: var(--faint); }
+.range-caret { font-size: 0.7rem; color: var(--faint); }
+.range-pop { position: absolute; top: calc(100% + 8px); left: 0; z-index: 30; background: var(--surface); border: 1px solid var(--rule); border-radius: 14px; box-shadow: var(--shadow); padding: 14px 16px; width: 592px; font-family: var(--font-body); color: var(--ink); animation: rise 0.15s ease-out; }
+.history svg { display: block; max-width: 100%; height: auto; }
+.history dl { display: grid; grid-template-columns: 52px 1fr; gap: 4px 10px; margin: 8px 0; font-size: 0.84rem; }
+.history dt { font-weight: 600; }
+.history dd { margin: 0; color: var(--ink); }
+.history .mono { font-family: var(--font-mono); color: var(--muted); font-size: 0.78rem; }
+.history p { margin: 6px 0 0; font-size: 0.8rem; color: var(--muted); line-height: 1.45; }
+.hist-dev { stroke: var(--faint); stroke-width: 3; stroke-linecap: round; }
+.hist-dev.later { stroke-dasharray: 2 5; }
+.hist-branch { stroke: var(--accent); stroke-width: 3; fill: none; stroke-linecap: round; }
+.hist-merge { stroke: var(--faint); stroke-width: 1.5; fill: none; }
+.hist-shade { fill: var(--accent-soft); }
+.hist-dot { fill: var(--accent); }
+.hist-dot.merge { fill: var(--surface); stroke: var(--faint); stroke-width: 1.5; }
+.hist-dot.faint { opacity: 0.35; }
+.hist-mark { stroke-width: 3; fill: var(--surface); }
+.hist-mark.before { stroke: var(--ink); }
+.hist-mark.after { stroke: var(--accent); }
+.hist-label { font-family: var(--font-body); font-size: 12px; font-weight: 600; fill: var(--ink); }
+.hist-name { font-family: var(--font-mono); font-size: 11px; fill: var(--muted); }
+.hist-note { font-family: var(--font-body); font-size: 11px; fill: var(--muted); }
+.hist-note.accent { fill: var(--accent); }

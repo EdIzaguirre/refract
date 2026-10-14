@@ -239,6 +239,8 @@ export interface CommitInfo {
   subject: string;
   author: string;
   date: string;
+  /** Parent commits, when known: two or more for a merge. */
+  parents?: string[];
 }
 
 export interface Comparison {
@@ -368,8 +370,22 @@ export interface FlowReport {
 
 // ---------- live state pushed to the browser ----------
 
+/** Where the comparison's two sides sit in the branch's history, for the header's drawing. */
+export interface BranchHistory {
+  /** The branch the "before" side comes from, such as dev. */
+  baseRef: string;
+  base: CommitInfo;
+  /** The before side is still that branch's newest commit. */
+  baseAtTip: boolean;
+  /** Commits that branch gained after `base`, which the comparison leaves out. */
+  baseAhead: number;
+  /** Branch commits that merged baseRef in. */
+  merges: string[];
+}
+
 export interface Timeline {
   base: string;
+  history?: BranchHistory;
   commits: CommitInfo[];
   watching: string | null;
   quietSeconds: number;

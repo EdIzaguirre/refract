@@ -283,6 +283,7 @@ export function App() {
         screen={screen}
         onScreen={goScreen}
         watching={timeline?.watching ?? null}
+        timeline={timeline}
         more={more}
         onMore={() => setMore((m) => !m)}
       />
