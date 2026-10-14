@@ -3,6 +3,9 @@ import { makeSampleRepo } from "../test/sample.js";
 import { Workspace } from "./workspace.js";
 import { PLAN_FORMAT, parsePlan, signature } from "./plan.js";
 import { planStory } from "./plan-preview.js";
+import { wordsOf } from "./plan-check.js";
+import { checkThemes } from "./story.js";
+import { surpriseLead, themeCounts } from "../shared/plan-words.js";
 import { sequenceFor } from "./flows.js";
 import type { PlanItem } from "../shared/types.js";
 
@@ -111,5 +114,33 @@ describe("plans against the sample shop", () => {
     expect(of("missing")).toEqual(expect.arrayContaining(["Receipts#resend", "refund on OrdersController"]));
     expect(of("different")).toEqual(expect.arrayContaining(["Receipts#send_for takes 2 parameters; the plan said 1", "Receipts never names Order"]));
     expect(of("surprise")).toEqual(expect.arrayContaining(["A new service: Payments::Gateway", "Order gained coupon, subtotal and discount", "Checkout.new now takes 2 parameters (was 1)"]));
+
+    // Every surprise sits in exactly one topic.
+    const surprises = items.map((i, n) => (i.status === "surprise" ? n : -1)).filter((n) => n >= 0);
+    const { themes } = await ws.checkPlan(c, plan);
+    expect(themes.flatMap((t) => t.items).sort()).toEqual(surprises.sort());
+
+    // Claude's topics are kept to the surprises, each once, and what it leaves out lands in "Everything else".
+    const named = checkThemes({ ...c, planCheck: { items, themes } }, {
+      lead: "It also takes payments.",
+      themes: [{ title: "Payments", summary: "Cards are charged.", kind: "new", items: [surprises[0], surprises[0], 999] }],
+    })!;
+    expect(named.themes[0].items).toEqual([surprises[0]]);
+    expect(named.themes.at(-1)).toMatchObject({ title: "Everything else", items: surprises.slice(1) });
+  });
+
+  it("groups surprises by the names they share", () => {
+    expect(wordsOf("Org::InvoiceLayoutsController")).toEqual(["invoice", "layout"]);
+    expect(wordsOf("fee_availabilities")).toEqual(["fee", "availability"]);
+    const items: PlanItem[] = [
+      { section: "tables", status: "surprise", text: "A new invoice_layouts table" },
+      { section: "screens", status: "surprise", text: "A new InvoiceLayoutsController" },
+      { section: "classes", status: "surprise", text: "A new service: InvoiceLayouts" },
+    ];
+    const theme = { title: "Invoice layouts", kind: "new" as const, items: [0, 1, 2] };
+    expect(themeCounts(theme, items)).toBe("a new table, a new screen and a new class");
+    expect(surpriseLead([theme, { title: "Timesheets", kind: "more", items: [] }])).toBe(
+      "The branch built one thing the plan never mentions: invoice layouts. It also did more than the plan said around timesheets.",
+    );
   });
 });

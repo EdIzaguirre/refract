@@ -113,7 +113,7 @@ export function Tour({
                 </span>
                 <span className="stop-title">
                   Plan check
-                  <span className="stop-sub">{planCounts(c)}</span>
+                  <span className="stop-sub">{planCounts(c, story)}</span>
                 </span>
               </button>
             </li>
@@ -211,6 +211,7 @@ export function Tour({
         {onCheck ? (
           <PlanCheckPage
             comparison={c}
+            story={story}
             onClass={openClass}
             onProduct={(part) => {
               if (P) {

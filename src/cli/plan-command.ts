@@ -2,6 +2,7 @@ import type { PlanCheck, PlanStatus } from "../shared/types.js";
 import type { Workspace } from "../core/workspace.js";
 import { PLAN_FORMAT, loadPlan } from "../core/plan.js";
 import { parseSchema, readLifecycles } from "../core/product.js";
+import { surpriseLead, themeCounts } from "../shared/plan-words.js";
 
 /**
  * `refract plan`: the pieces the /refract plan command in Claude Code needs.
@@ -61,6 +62,16 @@ export function printPlanCheck(check: PlanCheck): string {
   for (const status of CHECK_ORDER) {
     const items = check.items.filter((i) => i.status === status);
     out.push(`${HEADINGS[status]} (${items.length})`);
+    if (status === "surprise" && check.themes.length) {
+      // The surprises read as a few topics; each topic's lines sit under it.
+      out.push(`  ${surpriseLead(check.themes)}`);
+      for (const t of check.themes) {
+        out.push("", `  ${t.title}: ${themeCounts(t, check.items)}`);
+        for (const n of t.items) out.push(`    - ${check.items[n].text}${check.items[n].detail ? `. ${check.items[n].detail}` : ""}`);
+      }
+      out.push("");
+      continue;
+    }
     if (!items.length) out.push("  nothing");
     for (const i of items) out.push(`  - ${i.text}${i.detail ? `. ${i.detail}` : ""}`);
     out.push("");

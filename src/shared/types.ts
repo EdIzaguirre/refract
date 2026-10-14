@@ -341,6 +341,8 @@ export interface Story {
   stops: StoryStop[];
   /** One plain sentence per part of "What changed in the product", when Claude wrote the story. */
   product?: Partial<Record<ProductPart, string>>;
+  /** With a plan check: the surprises in a few topics Claude named, and the sentence that leads them. */
+  surprises?: { lead: string; themes: PlanTheme[] };
   error?: string;
 }
 
@@ -502,6 +504,20 @@ export interface PlanItem {
   target?: { kind: "class"; name: string; method?: string } | { kind: "product"; part: ProductPart; name: string };
 }
 
+/** Surprises that belong together, like a new table with its screen and service. */
+export interface PlanTheme {
+  /** A few plain words, like "Invoice layouts". */
+  title: string;
+  /** One plain sentence on what this is for, when Claude wrote the topics. */
+  summary?: string;
+  /** "new": something the plan never mentions at all. "more": more than the plan said about something it does. */
+  kind: "new" | "more";
+  /** Indexes into PlanCheck.items. */
+  items: number[];
+}
+
 export interface PlanCheck {
   items: PlanItem[];
+  /** The surprises in a few topics, measured from shared names. */
+  themes: PlanTheme[];
 }

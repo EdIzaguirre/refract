@@ -1,6 +1,6 @@
 import fs from "node:fs/promises";
 import path from "node:path";
-import type { ClassChange, Comparison, Delta, ProductPart, Story, StoryStop, Tone } from "../shared/types.js";
+import type { ClassChange, Comparison, Delta, PlanTheme, ProductPart, Story, StoryStop, Tone } from "../shared/types.js";
 import { askClaude } from "./claude.js";
 import { diffFor, factsFor } from "./lenses.js";
 import type { Workspace } from "./workspace.js";
@@ -40,6 +40,54 @@ const STORY_SCHEMA = {
   },
   required: ["summary", "product", "stops"],
 };
+
+/** With a plan check, the story also names the surprises' topics. */
+const SURPRISES_SCHEMA = {
+  type: "object",
+  properties: {
+    lead: { type: "string" },
+    themes: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          title: { type: "string" },
+          summary: { type: "string" },
+          kind: { enum: ["new", "more"] },
+          items: { type: "array", items: { type: "integer" } },
+        },
+        required: ["title", "summary", "kind", "items"],
+      },
+    },
+  },
+  required: ["lead", "themes"],
+};
+const schemaFor = (c: Comparison) =>
+  c.planCheck?.themes.length
+    ? { ...STORY_SCHEMA, properties: { ...STORY_SCHEMA.properties, surprises: SURPRISES_SCHEMA }, required: [...STORY_SCHEMA.required, "surprises"] }
+    : STORY_SCHEMA;
+
+/**
+ * Keeps Claude's topics honest: each surprise in exactly one topic, in the
+ * order Claude gave, and anything it left out in "Everything else".
+ */
+export function checkThemes(c: Comparison, out: { lead?: string; themes?: PlanTheme[] } | undefined): Story["surprises"] | undefined {
+  const items = c.planCheck?.items ?? [];
+  if (!out?.lead || !out.themes?.length) return undefined;
+  const open = new Set(items.map((i, n) => (i.status === "surprise" ? n : -1)).filter((n) => n >= 0));
+  const themes: PlanTheme[] = [];
+  for (const t of out.themes) {
+    const mine = (t.items ?? []).filter((n) => open.delete(n));
+    if (mine.length && t.title?.trim()) themes.push({ title: t.title.trim(), summary: t.summary?.trim() || undefined, kind: t.kind === "new" ? "new" : "more", items: mine });
+  }
+  if (!themes.length) return undefined;
+  if (open.size) {
+    const rest = themes.find((t) => t.title === "Everything else");
+    if (rest) rest.items.push(...open);
+    else themes.push({ title: "Everything else", kind: "more", items: [...open] });
+  }
+  return { lead: out.lead.trim(), themes };
+}
 
 /** Classes linked to `name` by a dependency the change added or removed, most relevant first. */
 function movedNeighbours(c: Comparison, name: string): string[] {
@@ -174,14 +222,38 @@ ${diff}
 </diff>`;
 }
 
+function surprisesPrompt(c: Comparison): string {
+  const check = c.planCheck;
+  if (!check?.themes.length) return "";
+  const lines = check.items.map((i, n) => (i.status === "surprise" ? `${n}. [${i.section}] ${i.text}` : null)).filter(Boolean);
+  const measured = check.themes.map((t) => `${t.title}: ${t.items.join(", ")}`);
+  return `
+
+This branch was built against a plan, "${c.plan?.title ?? ""}"${c.plan?.why ? ` (${c.plan.why})` : ""}. Refract found ${lines.length} things the branch built that the plan never mentions, listed below by number. That many lines is too much to read, so also write:
+- surprises.lead: one or two plain sentences a product person would say out loud about what the branch did beyond the plan, naming the new things. No counts of lines.
+- surprises.themes: 3 to 6 topics, most important first, that together hold every number below exactly once. Group by what the work is for in the product (like "Sending a timesheet back" or "Invoice layouts"), not by kind of code: a new table, its screen, its permission rule and its service belong in one topic. Each topic has:
+  - title: two to five plain words.
+  - summary: one plain sentence on what it lets people do, or what it changes for them.
+  - kind: "new" when the plan never mentions this at all, "more" when it is more than the plan said about something the plan does cover.
+  - items: the numbers of the lines it holds.
+  Put small code details that belong to no product topic (new helper methods, changed parameters) in a last topic titled "Everything else".
+
+Refract's own grouping by shared names, for reference (it can be wrong): ${measured.join("; ")}
+
+<surprises>
+${lines.join("\n")}
+</surprises>`;
+}
+
 async function cachePath(ws: Workspace, c: Comparison): Promise<string> {
   const dir = path.join(await ws.git.gitDir(), "refract", "stories");
   await fs.mkdir(dir, { recursive: true });
-  return path.join(dir, `${c.base.sha}-${c.head.sha}.json`);
+  // A plan check's topics depend on the plan too, so each version of the plan gets its own story.
+  return path.join(dir, `${c.base.sha}-${c.head.sha}${c.plan?.mode === "check" ? `-${c.plan.hash.slice(0, 12)}` : ""}.json`);
 }
 
 /** Bumped when the story's shape or prompt changes, so older cached stories are written again. */
-const STORY_VERSION = 2;
+const STORY_VERSION = 3;
 
 export async function cachedStory(ws: Workspace, c: Comparison): Promise<Story | null> {
   try {
@@ -196,9 +268,9 @@ export async function cachedStory(ws: Workspace, c: Comparison): Promise<Story |
 export async function writeStory(ws: Workspace, c: Comparison, lensQuestions: string[] = []): Promise<Story> {
   const measured = measuredStory(c);
   try {
-    const out = await askClaude<{ summary: string; product?: Story["product"]; stops: Omit<StoryStop, "id">[] }>(
-      storyPrompt(factsFor(c), await diffFor(ws, c, 60_000), lensQuestions),
-      STORY_SCHEMA,
+    const out = await askClaude<{ summary: string; product?: Story["product"]; stops: Omit<StoryStop, "id">[]; surprises?: { lead: string; themes: PlanTheme[] } }>(
+      storyPrompt(factsFor(c), await diffFor(ws, c, 60_000), lensQuestions) + surprisesPrompt(c),
+      schemaFor(c),
       { cwd: ws.git.root },
     );
     const stops = (out.stops ?? [])
@@ -206,7 +278,8 @@ export async function writeStory(ws: Workspace, c: Comparison, lensQuestions: st
       .filter((s) => s.classes.length > 0);
     if (!stops.length || !out.summary) return { ...measured, error: "Claude Code returned no usable stops" };
     const product = Object.fromEntries(PARTS.filter((p) => out.product?.[p]?.trim()).map((p) => [p, out.product![p]!.trim()]));
-    const story: Story = { base: c.base.sha, head: c.head.sha, source: "claude", status: "done", summary: out.summary, product, stops };
+    const surprises = checkThemes(c, out.surprises);
+    const story: Story = { base: c.base.sha, head: c.head.sha, source: "claude", status: "done", summary: out.summary, product, stops, ...(surprises ? { surprises } : {}) };
     await fs.writeFile(await cachePath(ws, c), JSON.stringify({ ...story, version: STORY_VERSION }, null, 2));
     return story;
   } catch (e) {

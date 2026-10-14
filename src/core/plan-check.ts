@@ -1,4 +1,4 @@
-import type { ClassUnit, Comparison, PlanCheck, PlanItem, PlanSection, PlanStatus, ProductPart, Snapshot } from "../shared/types.js";
+import type { ClassUnit, Comparison, PlanCheck, PlanItem, PlanSection, PlanStatus, PlanTheme, ProductPart, Snapshot } from "../shared/types.js";
 import type { Plan } from "./plan.js";
 import { findClass, modelFor } from "./plan-preview.js";
 
@@ -19,9 +19,14 @@ const fullList = (xs: string[]) => (xs.length > LONG ? `All of them: ${xs.join("
 
 export function checkPlan(plan: Plan, c: Comparison, before: Snapshot, after: Snapshot): PlanCheck {
   const items: PlanItem[] = [];
+  /** The names each line is about, for grouping the surprises. */
+  const about = new Map<PlanItem, string[]>();
   const p = c.product ?? { tables: [], migrations: [], screens: [], routes: { added: [], removed: [] }, permissions: [], lifecycles: [], jobs: [] };
-  const add = (section: PlanSection, status: PlanStatus, text: string, target?: PlanItem["target"], detail?: string) =>
-    items.push({ section, status, text, ...(target ? { target } : {}), ...(detail ? { detail } : {}) });
+  const add = (section: PlanSection, status: PlanStatus, text: string, target?: PlanItem["target"], detail?: string, names?: string[]) => {
+    const item: PlanItem = { section, status, text, ...(target ? { target } : {}), ...(detail ? { detail } : {}) };
+    items.push(item);
+    about.set(item, names ?? (target ? [target.name] : []));
+  };
   const product = (part: ProductPart, name: string) => ({ kind: "product" as const, part, name });
   const cls = (name: string, method?: string) => ({ kind: "class" as const, name, ...(method ? { method } : {}) });
   const nowClass = (n: string) => findClass(Object.keys(after.classes), n);
@@ -46,7 +51,7 @@ export function checkPlan(plan: Plan, c: Comparison, before: Snapshot, after: Sn
       const fk = new Set(built.references.map((r) => r.column));
       const named = new Set([...t.columns, ...t.add].map((x) => x.name));
       const extra = built.columns.map((x) => x.name).filter((n) => !named.has(n) && !fk.has(n));
-      if (extra.length) add("tables", "surprise", `${t.name} also has ${andList(extra)}`, target);
+      if (extra.length) add("tables", "surprise", `${t.name} also has ${andList(extra)}`, target, undefined, [t.name, ...extra]);
     } else {
       const addedCols = new Set((built?.columns ?? []).filter((x) => x.status === "added").map((x) => x.name));
       const removedCols = new Set((built?.columns ?? []).filter((x) => x.status === "removed").map((x) => x.name));
@@ -60,7 +65,7 @@ export function checkPlan(plan: Plan, c: Comparison, before: Snapshot, after: Sn
       if (noAdd.length) add("tables", "missing", `${andList(noAdd)} on ${t.name}`, target);
       if (noRemove.length) add("tables", "missing", `Dropping ${andList(noRemove)} from ${t.name}`, target);
       const extra = [...addedCols].filter((n) => !wantAdd.includes(n));
-      if (extra.length) add("tables", "surprise", `${t.name} also got ${andList(extra)}`, target);
+      if (extra.length) add("tables", "surprise", `${t.name} also got ${andList(extra)}`, target, undefined, [t.name, ...extra]);
     }
   }
   for (const t of p.tables) {
@@ -73,7 +78,7 @@ export function checkPlan(plan: Plan, c: Comparison, before: Snapshot, after: Sn
       const r = t.columns.filter((x) => x.status === "removed").map((x) => x.name);
       const ch = t.columns.filter((x) => x.status === "changed").map((x) => x.name);
       const bits = [a.length && `new ${andList(a)}`, r.length && `dropped ${andList(r)}`, ch.length && `changed ${andList(ch)}`].filter(Boolean);
-      if (bits.length) add("tables", "surprise", `${t.name}: ${bits.join("; ")}`, target);
+      if (bits.length) add("tables", "surprise", `${t.name}: ${bits.join("; ")}`, target, undefined, [...a, ...r, ...ch, t.name]);
       else if (t.references.some((x) => x.status !== "unchanged") || t.checks.added + t.checks.removed) add("tables", "surprise", `${t.name}: new references or checks`, target);
     }
   }
@@ -159,9 +164,9 @@ export function checkPlan(plan: Plan, c: Comparison, before: Snapshot, after: Sn
     byPolicy.set(r.policy, g);
   }
   for (const [policy, g] of byPolicy) {
-    if (g.added.length) add("permissions", "surprise", `${plural(g.added.length, "new rule")} on ${short(policy)}: ${andList(g.added)}`, cls(policy));
-    if (g.changed.length) add("permissions", "surprise", `${plural(g.changed.length, "existing rule")} on ${short(policy)} changed: ${andList(g.changed)}`, cls(policy));
-    if (g.removed.length) add("permissions", "surprise", `${short(policy)} dropped ${andList(g.removed)}`, cls(policy));
+    if (g.added.length) add("permissions", "surprise", `${plural(g.added.length, "new rule")} on ${short(policy)}: ${andList(g.added)}`, cls(policy), undefined, [...g.added, policy]);
+    if (g.changed.length) add("permissions", "surprise", `${plural(g.changed.length, "existing rule")} on ${short(policy)} changed: ${andList(g.changed)}`, cls(policy), undefined, [...g.changed, policy]);
+    if (g.removed.length) add("permissions", "surprise", `${short(policy)} dropped ${andList(g.removed)}`, cls(policy), undefined, [...g.removed, policy]);
   }
 
   // ---- jobs ----
@@ -272,5 +277,84 @@ export function checkPlan(plan: Plan, c: Comparison, before: Snapshot, after: Sn
     else add("flows", "different", `"${f.name}" runs differently`, head ? cls(head, f.steps[0].method) : undefined, `Refract can't find ${andList(broken)} in the code.`);
   }
 
-  return { items };
+  return { items, themes: themesFor(items, about, after) };
+}
+
+// ---- grouping the surprises ----
+
+/** Words that say what kind of thing a name is, not what it is about. */
+const KIND_WORDS = new Set(["controller", "policy", "job", "mailer", "query", "presenter", "renderer", "service", "concern", "id", "at", "by", "cents", "org", "self"]);
+const singular = (w: string) => (w.endsWith("ies") ? `${w.slice(0, -3)}y` : /(ss|us|is)$/.test(w) ? w : w.endsWith("s") ? w.slice(0, -1) : w);
+/** "Org::InvoiceLayoutsController" and "invoice_layouts" both read as ["invoice", "layout"]. */
+export function wordsOf(name: string): string[] {
+  return short(name)
+    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+    .toLowerCase()
+    .split(/[^a-z0-9]+/)
+    .filter((w) => w && !KIND_WORDS.has(w))
+    .map(singular);
+}
+/** One word stands for another when they are equal, or one is a long-enough start of the other ("attach", "attachment"). */
+const sameWord = (a: string, b: string) => a === b || (Math.min(a.length, b.length) >= 5 && (a.startsWith(b) || b.startsWith(a)));
+const contains = (words: string[], topic: string[]) => words.some((_, i) => topic.every((t, j) => words[i + j] !== undefined && sameWord(words[i + j], t)));
+const titleCase = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+const pluralWord = (w: string) => (/[^aeiou]y$/.test(w) ? `${w.slice(0, -1)}ies` : /(s|x|ch|sh)$/.test(w) ? `${w}es` : `${w}s`);
+/** The words a group's names start with: "Billing report", or "Timesheets" when only one word is shared. */
+function restTitle(names: string[]): string {
+  const lists = names.map(wordsOf).filter((w) => w.length);
+  const shared: string[] = [];
+  for (let i = 0; lists.every((w) => w[i] !== undefined && w[i] === lists[0][i]); i++) shared.push(lists[0][i]);
+  return titleCase(shared.length === 1 ? pluralWord(shared[0]) : shared.join(" "));
+}
+
+/**
+ * Puts the surprises into a few topics, so a long list reads as a handful of
+ * things. Each new table or new screen is a topic, and every surprise whose
+ * names contain its words joins it (a new service that only depends on the
+ * topic's model joins too). What is left groups by the first word of the
+ * thing it is about, like "timesheet"; a topic of one goes in "Everything else".
+ */
+function themesFor(items: PlanItem[], about: Map<PlanItem, string[]>, after: Snapshot): PlanTheme[] {
+  const surprises = items.map((item, i) => ({ item, i })).filter((x) => x.item.status === "surprise");
+  if (!surprises.length) return [];
+  const topics: { words: string[]; title: string; items: number[] }[] = [];
+  for (const { item } of surprises) {
+    const isNew = (item.section === "tables" && item.text.startsWith("A new ")) || (item.section === "screens" && item.text.startsWith("A new "));
+    if (!isNew || !item.target) continue;
+    const words = wordsOf(item.target.name);
+    if (!words.length || topics.some((t) => t.words.join(" ") === words.join(" "))) continue;
+    const raw = item.target.kind === "product" ? item.target.name.replace(/_/g, " ") : short(item.target.name).replace(/Controller$/, "").replace(/([a-z0-9])([A-Z])/g, "$1 $2").toLowerCase();
+    topics.push({ words, title: titleCase(raw), items: [] });
+  }
+  // The longest topic a name contains wins, so "invoice layout" beats "invoice".
+  const byLength = [...topics].sort((a, b) => b.words.length - a.words.length);
+  const topicOf = (names: string[]) => byLength.find((t) => names.some((n) => contains(wordsOf(n), t.words)));
+  const rest = new Map<string, number[]>();
+  for (const { item, i } of surprises) {
+    // A permission line names several rules, so it goes by its policy alone.
+    const names = item.section === "permissions" ? (about.get(item) ?? []).slice(-1) : (about.get(item) ?? []);
+    let topic = topicOf(names);
+    const first = wordsOf(item.target?.name ?? names[0] ?? "")[0] ?? "";
+    // A new class with no topic in its name joins the one topic it depends on, unless its name starts with a model's (TimesheetApproval is about timesheets).
+    if (!topic && item.section === "classes" && item.text.startsWith("A new ") && item.target?.kind === "class" && !after.classes[titleCase(first)]) {
+      const deps = after.classes[item.target.name]?.dependsOn.map((d) => d.to) ?? [];
+      const hits = new Set(deps.map((d) => topicOf([d])).filter(Boolean));
+      if (hits.size === 1) topic = [...hits][0];
+    }
+    if (topic) {
+      topic.items.push(i);
+      continue;
+    }
+    rest.set(first, [...(rest.get(first) ?? []), i]);
+  }
+  const themes: PlanTheme[] = topics.filter((t) => t.items.length).sort((a, b) => b.items.length - a.items.length).map((t) => ({ title: t.title, kind: "new" as const, items: t.items }));
+  const other: number[] = [];
+  const more: PlanTheme[] = [];
+  for (const [word, list] of rest) {
+    if (!word || list.length < 2) other.push(...list);
+    else more.push({ title: restTitle(list.map((n) => items[n].target?.name ?? "")), kind: "more", items: list });
+  }
+  more.sort((a, b) => b.items.length - a.items.length);
+  if (other.length) more.push({ title: "Everything else", kind: "more", items: other.sort((a, b) => a - b) });
+  return [...themes, ...more];
 }

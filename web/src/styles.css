@@ -544,5 +544,18 @@ a { color: var(--accent); }
 .plan-group.missing li > * { border-left: 3px solid var(--bad); }
 .plan-group.different li > * { border-left: 3px solid var(--ask); border-left-style: dashed; }
 .plan-group.built li > * { border-left: 3px solid var(--good); }
+.plan-lead { margin: 0; font-size: 1.02rem; line-height: 1.5; max-width: 62ch; }
+.plan-topics { display: grid; gap: 8px; }
+.plan-topic { background: var(--surface); border: 1px solid var(--rule); border-left: 3px solid var(--ask); border-radius: 8px; }
+.plan-topic > summary { cursor: pointer; list-style: none; display: grid; gap: 3px; padding: 10px 14px 10px 30px; position: relative; }
+.plan-topic > summary::-webkit-details-marker { display: none; }
+.plan-topic > summary::before { content: "▸"; position: absolute; left: 12px; top: 10px; color: var(--muted); transition: transform 0.15s; }
+.plan-topic[open] > summary::before { transform: rotate(90deg); }
+.plan-topic > summary:hover { background: color-mix(in srgb, var(--accent) 5%, transparent); }
+.plan-topic .topic-title { font-weight: 600; display: flex; align-items: center; gap: 8px; }
+.plan-topic .topic-summary { font-size: 0.92rem; }
+.plan-topic .topic-counts { font-size: 0.8rem; color: var(--muted); }
+.plan-topic > .plan-items { padding: 0 12px 12px 30px; }
+.plan-topic .plan-items li > * { border-left: 1px solid var(--rule); }
 .stop-num.plan svg { display: block; }
 .plan-problems { margin: 0; padding-left: 18px; }
