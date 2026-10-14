@@ -448,3 +448,5 @@ a { color: var(--accent); }
 .book-line svg { vertical-align: -2px; margin-right: 4px; }
 .book-line b { color: var(--ink); font-weight: 500; }
 .book-line:hover { color: var(--ink); }
+.tbl-edge-hit { fill: none; stroke: transparent; stroke-width: 14; pointer-events: stroke; cursor: help; }
+.tbl-edge:hover .fig-edge { stroke-width: 3; }

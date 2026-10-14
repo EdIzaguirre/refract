@@ -297,7 +297,8 @@ function TablesDiagram({ tables }: { tables: TableChange[] }) {
           const s = e.sections?.[0];
           if (!s) return [];
           const pts = [s.startPoint, ...(s.bendPoints ?? []), s.endPoint].map((p) => ({ x: p.x + PAD, y: p.y + PAD }));
-          return [{ path: splinePath(pts), status: e.r.status, label: e.r.column }];
+          const word = { added: "New reference", removed: "Removed reference", unchanged: "Existing reference", changed: "Reference" }[e.r.status];
+          return [{ path: splinePath(pts), status: e.r.status, label: `${word}: ${e.r.from}.${e.r.column} points at ${e.r.to}, so each ${e.r.from} row belongs to one ${e.r.to} row.` }];
         });
         setDrawing({ width: (g.width ?? 0) + PAD * 2, height: (g.height ?? 0) + PAD * 2, boxes: placed, edges });
       });
@@ -317,9 +318,12 @@ function TablesDiagram({ tables }: { tables: TableChange[] }) {
           ))}
         </defs>
         {drawing.edges.map((e, i) => (
-          <path key={i} d={e.path} className={`fig-edge ${e.status === "added" ? "new" : e.status === "removed" ? "gone" : "same"}`} markerEnd={`url(#tbl-${e.status === "changed" ? "unchanged" : e.status})`}>
+          <g key={i} className="tbl-edge">
             <title>{e.label}</title>
-          </path>
+            <path d={e.path} className={`fig-edge ${e.status === "added" ? "new" : e.status === "removed" ? "gone" : "same"}`} markerEnd={`url(#tbl-${e.status === "changed" ? "unchanged" : e.status})`} />
+            {/* A wide invisible stroke so the thin arrow is easy to hover. */}
+            <path d={e.path} className="tbl-edge-hit" />
+          </g>
         ))}
         {drawing.boxes.map((b) => (
           <g key={b.name} className={`tbl ${b.status}`}>
