@@ -12,7 +12,9 @@ Usage
   refract trace [range]      trace request flows by running the tests that touch the change
   refract install-command    add the /refract command to Claude Code
   refract --plan <name>      draw a plan against today's code, before the branch exists
+  refract --plan a --vs b    two plans for one goal side by side, to design it twice
   refract plan check [name]  the plan against what the branch built (plan path, format, context too)
+  refract plan compare a b   the two plans side by side, in the terminal
 
 Ranges
   (none)        the current branch against where it left the default branch
@@ -24,6 +26,7 @@ Options
   --no-open     do not open a browser
   --repo <dir>  repository to look at (default: current directory)
   --plan <name> with a range, check the branch against this plan instead of its own
+  --vs <name>   with --plan, a second plan to lay beside it
 
 Plans live at ~/.refract/<repo>/plans/<branch>.yml. A branch with a plan opens on
 its Plan check; /refract plan in Claude Code drafts one from the conversation.
@@ -43,7 +46,7 @@ function parse(argv: string[]): Args {
     if (a.startsWith("--")) {
       const [k, v] = a.slice(2).split("=");
       if (v !== undefined) flags[k] = v;
-      else if (["port", "repo", "base", "quiet", "plan"].includes(k)) flags[k] = argv[++i];
+      else if (["port", "repo", "base", "quiet", "plan", "vs"].includes(k)) flags[k] = argv[++i];
       else flags[k] = true;
     } else if (a === "-h") flags.help = true;
     else positional.push(a);
@@ -114,6 +117,7 @@ async function main() {
         open: !args.flags["no-open"],
         quietSeconds: Number(args.flags.quiet ?? 180),
         plan: typeof args.flags.plan === "string" ? args.flags.plan : undefined,
+        vs: typeof args.flags.vs === "string" ? args.flags.vs : undefined,
       });
       return;
     }

@@ -135,7 +135,18 @@ async function layout(c: Comparison, names: string[]): Promise<Drawing> {
 export const shortName = (name: string) => name.split("::").pop() ?? name;
 const ns = (name: string) => name.split("::").slice(0, -1).join("::");
 
-export function StopDiagram({ comparison, classes, onOpen }: { comparison: Comparison; classes: string[]; onOpen(name: string): void }) {
+export function StopDiagram({
+  comparison,
+  classes,
+  onOpen,
+  only,
+}: {
+  comparison: Comparison;
+  classes: string[];
+  onOpen(name: string): void;
+  /** Draw one side alone, under this tag: a plan beside another plan has no "before" of its own. */
+  only?: { side: "before" | "after"; tag: string };
+}) {
   const [drawing, setDrawing] = useState<Drawing | null>(null);
   useEffect(() => {
     let stale = false;
@@ -147,10 +158,10 @@ export function StopDiagram({ comparison, classes, onOpen }: { comparison: Compa
 
   if (!drawing) return <div className="figure-loading">Drawing…</div>;
   return (
-    <div className="figure">
-      {(["before", "after"] as const).map((side) => (
+    <div className={`figure ${only ? "one" : ""}`}>
+      {(only ? [only.side] : (["before", "after"] as const)).map((side) => (
         <div key={side} className={`pane ${side}`}>
-          <div className="pane-tag">{side}</div>
+          <div className="pane-tag">{only?.tag ?? side}</div>
           {drawing.nodes.every((n) => !n.change.shape[side]) && (
             <div className="pane-note">{side === "before" ? "None of these classes existed yet." : "All of these classes were removed."}</div>
           )}
@@ -161,8 +172,11 @@ export function StopDiagram({ comparison, classes, onOpen }: { comparison: Compa
   );
 }
 
+let figures = 0;
+
 function Pane({ drawing, side, onOpen }: { drawing: Drawing; side: "before" | "after"; onOpen(name: string): void }) {
-  const id = `fig-${side}`;
+  // Two drawings of the same side can share a page, so each needs its own arrowhead ids.
+  const [id] = useState(() => `fig-${side}-${figures++}`);
   return (
     <svg viewBox={`0 0 ${drawing.width} ${drawing.height}`} preserveAspectRatio="xMidYMid meet" role="img" aria-label={`The classes ${side} the change`}>
       <defs>

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { Comparison, LensReport, ServerEvent, Story, Timeline } from "../../src/shared/types";
+import type { Comparison, LensReport, PlanComparison, ServerEvent, Story, Timeline } from "../../src/shared/types";
 import { api, useEvents } from "./api";
 import { layoutMap, type MapLayout } from "./map/layout";
 import { MapView, type MapHandle } from "./map/MapView";
@@ -9,6 +9,7 @@ import { TimelineBar } from "./TimelineBar";
 import { ClassPanel, type PanelTab } from "./ClassPanel";
 import { Crumbs, Hint, Peek, useHints, type Level } from "./MapChrome";
 import { Tour } from "./tour/Tour";
+import { PlanPair } from "./PlanPair";
 
 export type Mode = "before" | "after" | "split";
 export type Screen = "tour" | "explore";
@@ -36,6 +37,8 @@ export function App() {
   const [toast, setToast] = useState<string | null>(null);
   const [fresh, setFresh] = useState<string | null>(null);
   const [areasPath, setAreasPath] = useState("");
+  // Started with two plans (--plan a --vs b): the page is the two side by side.
+  const [pair, setPair] = useState<PlanComparison | null>(null);
   const map = useRef<MapHandle>(null);
   const following = useRef(true);
 
@@ -44,6 +47,8 @@ export function App() {
     api
       .state()
       .then((s) => {
+        setStatus(s.status);
+        if (s.plans) return setPair(s.plans);
         setTimeline(s.timeline);
         setLiveHead(s.head);
         setHead(s.head);
@@ -103,6 +108,9 @@ export function App() {
         }
         break;
       }
+      case "plans":
+        setPair(e.payload as PlanComparison);
+        break;
       case "comparison": {
         const c = e.payload as Comparison;
         if (c.head.sha === head || (following.current && c.head.sha === liveHead)) setComparison(c);
@@ -275,6 +283,8 @@ export function App() {
       </div>
     );
   }
+
+  if (pair) return <PlanPair pair={pair} />;
 
   return (
     <div className="app">

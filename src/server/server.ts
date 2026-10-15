@@ -4,7 +4,7 @@ import { existsSync } from "node:fs";
 import path from "node:path";
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
-import type { BranchHistory, Comparison, FlowReport, LensReport, ServerEvent, Snapshot, Story, Timeline } from "../shared/types.js";
+import type { BranchHistory, Comparison, FlowReport, LensReport, PlanComparison, ServerEvent, Snapshot, Story, Timeline } from "../shared/types.js";
 import { cachedLenses, runLenses } from "../core/lenses.js";
 import { cachedFlows, sequenceFor, traceFlows } from "../core/flows.js";
 import { draftAreas } from "../core/draft-areas.js";
@@ -29,6 +29,8 @@ export interface ServerOptions {
    * against. Without it, the branch's own plan is checked when there is one.
    */
   plan?: string;
+  /** With plan: a second plan for the same goal, laid beside the first ("design it twice"). */
+  vs?: string;
 }
 
 /**
@@ -48,7 +50,8 @@ export async function startServer(ws: Workspace, opts: ServerOptions): Promise<v
   const port = await listen(server, opts.port);
   const url = `http://127.0.0.1:${port}/`;
   process.stdout.write(`Refract is showing ${ws.key} at ${url}\n`);
-  if (live.preview) process.stdout.write(`Previewing the plan in ${live.planPath}; edit it and the page follows. Ctrl-C to stop.\n`);
+  if (live.rival) process.stdout.write(`Comparing ${live.planPath} with ${live.rivalPath}; edit either and the page follows. Ctrl-C to stop.\n`);
+  else if (live.preview) process.stdout.write(`Previewing the plan in ${live.planPath}; edit it and the page follows. Ctrl-C to stop.\n`);
   else if (live.plan) process.stdout.write(`Checking ${live.watching ?? live.headName} against the plan in ${live.planPath}.\n`);
   if (live.watching) process.stdout.write(`Watching ${live.watching}; new commits appear as they land. Ctrl-C to stop.\n`);
   if (opts.open) openBrowser(url);
@@ -98,6 +101,11 @@ class LiveState {
   planPath: string | null = null;
   preview = false;
   private planMtime = 0;
+  /** With --vs: the second plan, and the two laid side by side. */
+  rival: Plan | null = null;
+  rivalPath: string | null = null;
+  private rivalMtime = 0;
+  private pair: Promise<PlanComparison> | null = null;
   /** In a preview, the planned snapshot that request flows read. */
   private planned: Snapshot | null = null;
 
@@ -107,6 +115,7 @@ class LiveState {
   ) {}
 
   async init() {
+    if (this.opts.plan && this.opts.vs) return this.initPair(this.opts.plan, this.opts.vs);
     if (this.opts.plan && !this.opts.spec && this.opts.watch === undefined) return this.initPreview(this.opts.plan);
     const range = await this.ws.range(this.opts.spec ?? this.opts.watch ?? undefined);
     this.base = range.base;
@@ -135,12 +144,9 @@ class LiveState {
     this.planPath = this.ws.planPath(name);
     this.plan = await loadPlan(this.planPath, name);
     if (!this.plan) throw new Error(`No plan at ${this.planPath}. Draft one with /refract plan in Claude Code, or write it by hand (refract plan format shows how).`);
-    // Against where the plan's branch left the default branch, if the branch exists; else the default branch's tip.
-    const branch = (await this.ws.git.tryResolve(`refs/heads/${name}`)) ?? (await this.ws.git.tryResolve(`refs/remotes/origin/${name}`));
-    const main = await this.ws.git.defaultBranch();
-    const base = branch && main ? await this.ws.git.mergeBase(main, branch) : null;
-    this.base = base ?? (await this.ws.git.resolve(main ?? "HEAD"));
-    this.baseFrom = main ?? null;
+    const { base, from } = await this.ws.planBase(name);
+    this.base = base;
+    this.baseFrom = from;
     this.head = this.base;
     this.headName = name;
     this.watching = null;
@@ -149,6 +155,57 @@ class LiveState {
     this.setStatus("Drawing the plan");
     await this.compare(this.head);
     this.setStatus("Ready");
+  }
+
+  /** Two plans for one goal: both drawn against the same code, compared side by side. */
+  private async initPair(a: string, b: string) {
+    this.planPath = this.ws.planPath(a);
+    this.rivalPath = this.ws.planPath(b);
+    this.plan = await loadPlan(this.planPath, a);
+    this.rival = await loadPlan(this.rivalPath, b);
+    for (const [p, f] of [[this.plan, this.planPath], [this.rival, this.rivalPath]] as const)
+      if (!p) throw new Error(`No plan at ${f}. Draft two with /refract plan --two in Claude Code, or write them by hand (refract plan format shows how).`);
+    const { base, from } = await this.ws.planBase(a);
+    this.base = this.head = base;
+    this.baseFrom = from;
+    this.headName = a;
+    this.preview = true;
+    this.setStatus("Drawing both plans");
+    await this.plans();
+    this.setStatus("Ready");
+  }
+
+  /** The two plans side by side, recomputed when either file changes. */
+  plans(): Promise<PlanComparison> | null {
+    if (!this.rival || !this.plan) return null;
+    if (!this.pair) {
+      this.pair = this.ws.comparePlans(this.plan, this.rival, this.base, this.baseFrom);
+      this.pair.catch(() => (this.pair = null));
+    }
+    return this.pair;
+  }
+
+  private async watchRival() {
+    if (!this.rivalPath) return;
+    let mtime = -1;
+    try {
+      mtime = (await fs.stat(this.rivalPath)).mtimeMs;
+    } catch {
+      // Gone; keep showing the last one.
+    }
+    if (!this.rivalMtime) this.rivalMtime = mtime;
+    if (mtime === this.rivalMtime || mtime < 0) return;
+    this.rivalMtime = mtime;
+    this.rival = (await loadPlan(this.rivalPath, this.rival?.name)) ?? this.rival;
+    await this.refreshPair("Plan B updated");
+  }
+
+  private async refreshPair(message: string) {
+    this.pair = null;
+    const p = this.plans();
+    if (!p) return;
+    this.broadcast({ type: "plans", payload: await p });
+    this.setStatus(message);
   }
 
   /** Re-reads the plan when its file changes, so the page follows the edits. */
@@ -163,6 +220,10 @@ class LiveState {
     if (!this.planMtime) this.planMtime = mtime;
     if (mtime === this.planMtime) return;
     this.planMtime = mtime;
+    if (this.rival) {
+      if (mtime >= 0) this.plan = (await loadPlan(this.planPath, this.plan?.name)) ?? this.plan;
+      return this.refreshPair("Plan A updated");
+    }
     this.plan = mtime < 0 ? null : await loadPlan(this.planPath, this.plan?.name ?? this.opts.plan);
     if (this.preview && !this.plan) return this.setStatus(`The plan at ${this.planPath} is gone`);
     await this.refreshAll(this.plan?.problems.length ? `Plan updated, with ${this.plan.problems.length} line${this.plan.problems.length === 1 ? "" : "s"} Refract could not read` : "Plan updated");
@@ -171,6 +232,7 @@ class LiveState {
 
   start() {
     setInterval(() => this.watchPlan().catch((e) => this.setStatus(`Plan error: ${(e as Error).message}`)), 1500);
+    if (this.rival) setInterval(() => this.watchRival().catch((e) => this.setStatus(`Plan error: ${(e as Error).message}`)), 1500);
     if (this.preview) return;
     if (this.watching) setInterval(() => this.poll().catch((e) => this.setStatus(`Watch error: ${(e as Error).message}`)), 2000);
     // Lenses run on their own once the branch has been quiet for a while.
@@ -416,6 +478,8 @@ async function route(live: LiveState, req: http.IncomingMessage, res: http.Serve
       live.subscribe(res);
       return;
     case "/api/state": {
+      const plans = live.plans();
+      if (plans) return json({ plans: await plans, status: live.status });
       const h = await head();
       return json({
         timeline: live.timeline(),
@@ -427,6 +491,10 @@ async function route(live: LiveState, req: http.IncomingMessage, res: http.Serve
         areasPath: live.ws.areasPath,
         planPath: live.planPath,
       });
+    }
+    case "/api/plans": {
+      const plans = live.plans();
+      return plans ? json(await plans) : json({ error: "Refract was not started with two plans" }, 404);
     }
     case "/api/compare":
       return json(await live.compare(await head()));

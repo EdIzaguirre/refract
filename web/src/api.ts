@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import type { Comparison, LensReport, Sequence, ServerEvent, Story, Timeline } from "../../src/shared/types";
+import type { Comparison, LensReport, PlanComparison, Sequence, ServerEvent, Story, Timeline } from "../../src/shared/types";
 
 export interface AppState {
   timeline: Timeline;
@@ -9,6 +9,8 @@ export interface AppState {
   story: Story;
   status: string;
   areasPath: string;
+  /** Only when Refract was started with two plans; the rest is then left out. */
+  plans?: PlanComparison;
 }
 
 async function get<T>(url: string, init?: RequestInit): Promise<T> {

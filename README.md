@@ -51,6 +51,7 @@ refract trace main..feature   # trace request flows by running the relevant test
 refract areas --draft         # ask Claude Code to draft your business areas
 refract --plan feature-x      # draw a plan against today's code, before the branch exists
 refract plan check feature-x  # the plan against what the branch built
+refract --plan x-a --vs x-b   # two plans for one goal, side by side (design it twice)
 ```
 
 `refract` and `refract watch` start a local server on <http://127.0.0.1:4100> (or the next free port) and open your browser. `--port`, `--no-open` and `--quiet <seconds>` (how long a watched branch must be quiet before the lenses run on their own; default 180) are available.
@@ -103,6 +104,18 @@ flows:
     - TimesheetCharge.create!
 ```
 
+### Design it twice
+
+Ousterhout's Ch 11 asks for "multiple options for each major design decision". `refract --plan <a> --vs <b>` draws two plans for the same goal against the same code and lays them side by side, product first:
+
+- **What each plan adds to the product**: the tables, states, screens, rules and jobs where they part ways (with each plan's tables drawn), then what they share.
+- **What the rest of the code must learn**: the public methods each plan adds outside controllers, policies, jobs and mailers, with their parameters.
+- **How tangled each plan is**: the arrows it adds between classes and between business areas, drawn in Rails layers.
+- **The same request under each plan**: flows paired by name (or by the action they start from), as sequence diagrams, with how many calls the entry point makes itself.
+- **One short Ousterhout note**, argued from Ch 11's own questions ("Does one alternative have a simpler interface than another?", "ease of use for higher level software"). Plans have no code, so it weighs interfaces and arrows only.
+
+Edit either file and the page follows. `refract plan compare <a> <b>` prints the same in the terminal. In Claude Code, `/refract plan --two <name>` drafts two genuinely different plans (`<name>-a` and `<name>-b`), opens them side by side, and once you pick one, saves it as `<name>` so the branch's Plan check uses it.
+
 `refract plan format` prints the full format, `refract plan context` lists today's tables, states, controllers, policies and classes to plan against, and `refract plan path <name>` says where a plan goes. Parameters count only when the plan writes the parentheses, so `assign_numbers!` leaves them open and `assign_numbers!()` says there are none.
 
 ## Business areas
@@ -149,7 +162,7 @@ git commit ──► language reader ──► snapshot ──► compare(base, 
 - `src/core/compare.ts` compares two snapshots: class shapes, method changes, dependency edges, area roll-ups, and the measured deltas behind the verdict.
 - `src/core/product.ts` reads what the change does to the product: tables, columns and foreign keys from `db/schema.rb` at both commits, new migrations, lifecycles in touched models, controller actions, route lines, policy rules, and jobs and mailers. Rails conventions only, nothing guessed.
 - `src/core/story.ts` writes the summary: Claude Code turns the measurements, the diff and the lens questions into key changes, cached in `.git/refract/stories/`; `measuredStory` builds them from the deltas when Claude is not available.
-- `src/core/plan.ts` reads a plan file; `plan-preview.ts` lays it over today's snapshot so the usual comparison draws it, and `plan-check.ts` lays it beside a real comparison and lists what matches, what's missing and what's a surprise. The surprises read as a few topics: Claude names them with the story, and until it has, Refract groups them by the names they share (a new table, its screen and its service).
+- `src/core/plan.ts` reads a plan file; `plan-preview.ts` lays it over today's snapshot so the usual comparison draws it, `plan-compare.ts` lays two previews side by side, and `plan-check.ts` lays it beside a real comparison and lists what matches, what's missing and what's a surprise. The surprises read as a few topics: Claude names them with the story, and until it has, Refract groups them by the names they share (a new table, its screen and its service).
 - `src/core/lenses.ts` sends each lens its checklist from `lenses/*.md`, the measurements and the diff, and asks for structured questions. The checklists were built from the books with quotes checked word for word; lenses must argue only from them.
 - `src/server/server.ts` serves the app, polls the watched branch every 2 seconds and pushes new comparisons, lens progress and status over Server-Sent Events.
 - `web/` is React and SVG with d3-zoom; ELK lays out each area's class graph; Mermaid draws the sequence diagrams.

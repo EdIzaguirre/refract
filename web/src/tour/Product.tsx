@@ -263,7 +263,7 @@ function boxFor(t: TableChange | null, name: string): Omit<TableBox, "x" | "y"> 
 
 const elk = new ELK();
 
-function TablesDiagram({ tables }: { tables: TableChange[] }) {
+export function TablesDiagram({ tables }: { tables: TableChange[] }) {
   const [drawing, setDrawing] = useState<{ width: number; height: number; boxes: TableBox[]; edges: { path: string; status: ChangeStatus; label: string; one: boolean; at: { x: number; y: number } }[] } | null>(null);
   useEffect(() => {
     let stale = false;

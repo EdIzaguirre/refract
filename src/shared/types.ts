@@ -406,7 +406,7 @@ export interface Timeline {
 }
 
 export interface ServerEvent {
-  type: "comparison" | "timeline" | "lenses" | "status" | "flows" | "story";
+  type: "comparison" | "timeline" | "lenses" | "status" | "flows" | "story" | "plans";
   payload: unknown;
 }
 
@@ -520,4 +520,42 @@ export interface PlanCheck {
   items: PlanItem[];
   /** The surprises in a few topics, measured from shared names. */
   themes: PlanTheme[];
+}
+
+// ---------- two plans, side by side ----------
+
+/** One plan in a side-by-side comparison of two designs for the same goal. */
+export interface PlanSide {
+  label: "A" | "B";
+  plan: PlanInfo;
+  product: ProductChanges;
+  /** The plan drawn over today's code, trimmed to the classes it adds or reshapes, what they point at, and the arrows among them. */
+  drawing: Comparison;
+  /** What the rest of the code must learn: the public methods the plan adds outside controllers, policies, jobs and mailers. */
+  surface: { classes: { name: string; role: Role; isNew: boolean; methods: string[]; params: number }[]; methods: number; params: number };
+  /** How tangled: classes the plan touches and the arrows it adds between classes and between business areas. */
+  coupling: { touched: number; created: number; reshaped: number; arrows: number; crossArea: number };
+  /** Planned requests: the calls as "Caller → Callee#method", and how many calls the entry point makes itself. */
+  flows: { name: string; sequence: Sequence; calls: string[]; steps: number; entryCalls: number }[];
+}
+
+/** One product fact, and which plan has it. */
+export interface ProductRow {
+  part: ProductPart;
+  /** Table, lifecycle, screen, policy or job name. */
+  subject: string;
+  a?: string;
+  b?: string;
+  /** "both": the same in both plans. "different": both touch it, in different ways. */
+  where: "both" | "different" | "a" | "b";
+}
+
+export interface PlanComparison {
+  base: { ref: string; short: string };
+  sides: [PlanSide, PlanSide];
+  product: ProductRow[];
+  /** The same request under each plan, as indexes into each side's flows. */
+  flows: { title: string; a?: number; b?: number }[];
+  /** A short note from the Ousterhout lens, argued from Ch 11 "Design it Twice". */
+  note: { lines: string[]; source: string };
 }
