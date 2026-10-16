@@ -1,6 +1,6 @@
 ---
 description: Open Refract's map of a change, or with "plan", draft a plan (or two to compare) Refract can draw before the code exists
-argument-hint: "[range or branch to watch] | plan [name] | plan --two [name]"
+argument-hint: "[range or branch to watch] | plan [name] | plan --two|--three|--four [name] [--base branch]"
 allowed-tools: Bash(refract:*), Bash(nohup refract:*), Read, Grep, Glob, Write(~/.refract/**), Edit(~/.refract/**)
 ---
 
@@ -8,7 +8,7 @@ Refract shows how a code change reshaped this codebase: what changed in the prod
 
 The arguments are: `$ARGUMENTS`
 
-If they start with `plan --two` (or `plan` and ask for two designs), follow **Draft two plans** below. If they start with `plan`, follow **Draft a plan**. Otherwise follow **Open the map**.
+If they start with `plan --two`, `plan --three` or `plan --four` (or `plan` and ask for several designs), follow **Draft several plans** below. If they start with `plan`, follow **Draft a plan**. Otherwise follow **Open the map**.
 
 ## Open the map
 
@@ -45,17 +45,19 @@ A plan is one small YAML file saying what a change intends to do, in the terms R
 
 Then I will argue with the plan. Edit the file as we go; the page re-reads it on every save. When the branch is built, `refract <branch>` opens on the Plan check, and `refract plan check <name>` prints the same list here.
 
-## Draft two plans
+## Draft several plans
 
-Ousterhout's "design it twice" (A Philosophy of Software Design, Ch 11): before settling on a design, sketch a second one that is radically different, and compare them. Here that means two plan files for the same goal, laid side by side.
+Ousterhout's "design it twice" (A Philosophy of Software Design, Ch 11): before settling on a design, sketch others that are radically different, and compare them. Here that means two to four plan files for the same goal, laid side by side. `--two` is the default; `--three` and `--four` ask for more. Refract compares at most four at a time.
 
-1. Pick the name as in **Draft a plan**, step 1. The two plans are `<name>-a` and `<name>-b`.
+1. Pick the name as in **Draft a plan**, step 1. The plans are `<name>-a`, `<name>-b`, and `<name>-c` and `<name>-d` when asked for. If the arguments give `--base <branch>` (a shared core branch the designs build on), pass `--base <branch>` to every `refract` command below.
 2. Run `refract plan format` and `refract plan context`, and read the code the goal touches, as in **Draft a plan**, step 2.
-3. Write two plans that reach the same goal in genuinely different ways, following the rules in **Draft a plan**, step 3. Different means a different shape, not different names: where the work lives (a new service against an existing model or a concern), what new tables there are (a new table against columns or rows on an existing one), or who drives the request (the controller calling each step against one call into a deeper class). Change the product only where the second design truly needs it, since the comparison is clearest when both deliver the same product. Give each a `title` that names its approach, like "Invoices, as line items".
-4. Write them to the paths `refract plan path <name>-a` and `refract plan path <name>-b` print, and run `refract plan check` on each until Refract reads every line.
-5. Compare them and keep the comparison in this conversation: `refract plan compare <name>-a <name>-b`
+3. Write plans that reach the same goal in genuinely different ways, following the rules in **Draft a plan**, step 3. Different means a different shape, not different names: where the work lives (a new service against an existing model or a concern), what new tables there are (a new table against columns or rows on an existing one), or who drives the request (the controller calling each step against one call into a deeper class). Change the product only where the second design truly needs it, since the comparison is clearest when both deliver the same product. Give each a `title` that names its approach, like "Invoices, as line items".
+4. Write each to the path `refract plan path <name>-a` (and so on) prints, and run `refract plan check` on each until Refract reads every line.
+5. Compare them and keep the comparison in this conversation: `refract plan compare <name>-a <name>-b [<name>-c ...]`
 6. Open the side-by-side page in the background and tell me the URL:
-   `nohup refract --plan <name>-a --vs <name>-b > "${TMPDIR:-/tmp}/refract-plans.log" 2>&1 &`
-7. In four or five sentences: what each plan commits to, where they differ in the product, and the trade-off the comparison shows. Do not pick for me.
+   `nohup refract --plan <name>-a --vs <name>-b,<name>-c > "${TMPDIR:-/tmp}/refract-plans.log" 2>&1 &`
+7. In four to six sentences: what each plan commits to, where they differ in the product, and the trade-off the comparison shows. Do not pick for me.
 
-Then I will argue with both. Edit either file as we go; the page re-reads them. When I pick one (or ask for a mix of the two), write the result to `refract plan path <name>` so the branch's Plan check uses it, and say so.
+If I bring designs we already discussed (or built on branches), write one plan per design instead of inventing new ones, and compare those.
+
+Then I will argue with them. Edit any file as we go; the page re-reads them. When I pick one (or ask for a mix of the two), write the result to `refract plan path <name>` so the branch's Plan check uses it, and say so.

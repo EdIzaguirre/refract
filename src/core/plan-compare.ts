@@ -3,13 +3,17 @@ import type { Plan, PlanFlow } from "./plan.js";
 import { planInfo } from "./plan-preview.js";
 
 /**
- * Two plans for the same goal, side by side: Ousterhout's "design it twice"
- * (A Philosophy of Software Design, Ch 11). Both are drawn against the same
- * code, then compared on what they add to the product, how much the rest of
- * the code must learn, how many arrows they add, and how the same request
+ * Two to four plans for the same goal, side by side: Ousterhout's "design it
+ * twice" (A Philosophy of Software Design, Ch 11). All are drawn against the
+ * same code, then compared on what they add to the product, how much the rest
+ * of the code must learn, how many arrows they add, and how the same request
  * runs under each. Plans have no code, so depth is judged from interfaces and
  * arrows only.
  */
+
+/** More than this stops fitting side by side, and stops being a comparison anyone can hold in their head. */
+export const MAX_PLANS = 4;
+const LABELS = ["A", "B", "C", "D"];
 
 /** Roles whose public methods are product facts (screens, rules, emails), so they are not counted as interface. */
 const PRODUCT_ROLES: Role[] = ["controller", "policy", "job", "mailer"];
@@ -18,18 +22,15 @@ const short = (n: string) => n.split("::").pop() ?? n;
 const shortController = (n: string) => n.replace(/Controller$/, "");
 const list = (xs: string[]) => xs.join(", ");
 
-export function comparePlans(
-  base: { ref: string; short: string },
-  a: { plan: Plan; comparison: Comparison },
-  b: { plan: Plan; comparison: Comparison },
-): PlanComparison {
-  const sides: [PlanSide, PlanSide] = [side("A", a.plan, a.comparison), side("B", b.plan, b.comparison)];
-  const product = productRows(sides[0].product, sides[1].product);
-  const flows = pairFlows(a.plan.flows, b.plan.flows);
+export function comparePlans(base: { ref: string; short: string }, plans: { plan: Plan; comparison: Comparison }[]): PlanComparison {
+  if (plans.length < 2 || plans.length > MAX_PLANS) throw new Error(`Refract compares 2 to ${MAX_PLANS} plans at a time, not ${plans.length}.`);
+  const sides = plans.map((p, i) => side(LABELS[i], p.plan, p.comparison));
+  const product = productRows(sides.map((s) => s.product));
+  const flows = matchFlows(plans.map((p) => p.plan.flows));
   return { base, sides, product, flows, note: note(sides, product, flows) };
 }
 
-function side(label: "A" | "B", plan: Plan, c: Comparison): PlanSide {
+function side(label: string, plan: Plan, c: Comparison): PlanSide {
   const planned = c.classes.filter((k) => k.planned);
   const sigs = new Map<string, string>();
   for (const k of plan.classes) for (const m of k.public) sigs.set(`${short(k.name)}|${m.scope === "class" ? "self." : ""}${m.name}`, m.signature);
@@ -163,23 +164,21 @@ export function productFacts(p: ProductChanges): Fact[] {
 }
 
 const PART_ORDER: ProductPart[] = ["data", "lifecycles", "screens", "permissions", "jobs"];
-const WHERE_ORDER: ProductRow["where"][] = ["different", "a", "b", "both"];
 
-export function productRows(a: ProductChanges, b: ProductChanges): ProductRow[] {
-  const fa = productFacts(a);
-  const fb = new Map(productFacts(b).map((f) => [f.key, f]));
-  const rows: ProductRow[] = [];
-  for (const x of fa) {
-    const y = fb.get(x.key);
-    fb.delete(x.key);
-    if (!y) rows.push({ part: x.part, subject: x.subject, a: x.text, where: "a" });
-    else rows.push({ part: x.part, subject: x.subject, a: x.text, b: y.text, where: x.same === y.same ? "both" : "different" });
-  }
-  for (const y of fb.values()) rows.push({ part: y.part, subject: y.subject, b: y.text, where: "b" });
+/** One row per table, lifecycle, screen, policy or job any plan touches, with each plan's version of it. */
+export function productRows(products: ProductChanges[]): ProductRow[] {
+  const facts = products.map((p) => new Map(productFacts(p).map((f) => [f.key, f])));
+  const keys = [...new Set(facts.flatMap((m) => [...m.keys()]))];
+  const rows = keys.map((key) => {
+    const mine = facts.map((m) => m.get(key) ?? null);
+    const first = mine.find((f) => f)!;
+    const same = mine.every((f) => f && f.same === first.same);
+    return { part: first.part, subject: first.subject, cells: mine.map((f) => f?.text ?? null), where: same ? "all" : "some" } as ProductRow;
+  });
   // Where they differ first; within that, the product's own order.
   return rows
     .map((r, i) => ({ r, i }))
-    .sort((x, y) => WHERE_ORDER.indexOf(x.r.where) - WHERE_ORDER.indexOf(y.r.where) || PART_ORDER.indexOf(x.r.part) - PART_ORDER.indexOf(y.r.part) || x.i - y.i)
+    .sort((x, y) => (x.r.where === y.r.where ? 0 : x.r.where === "some" ? -1 : 1) || PART_ORDER.indexOf(x.r.part) - PART_ORDER.indexOf(y.r.part) || x.i - y.i)
     .map(({ r }) => r);
 }
 
@@ -188,21 +187,29 @@ export function productRows(a: ProductChanges, b: ProductChanges): ProductRow[] 
 const entry = (f: PlanFlow) => f.steps[0]?.text ?? "";
 const entryClass = (f: PlanFlow) => f.steps[0]?.cls ?? "";
 
-/** Pairs flows by name, then by the action they start from, then by the controller. */
-export function pairFlows(a: PlanFlow[], b: PlanFlow[]): PlanComparison["flows"] {
-  const left = new Set(b.map((_, i) => i));
-  const take = (match: (y: PlanFlow) => boolean) => {
-    const j = [...left].find((i) => match(b[i]));
-    if (j !== undefined) left.delete(j);
-    return j;
-  };
+/** Lines up the same request across plans: by name, then by the action it starts from, then by the controller. */
+export function matchFlows(plans: PlanFlow[][]): PlanComparison["flows"] {
   const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
-  const firstPass = a.map((x) => take((y) => norm(y.name) === norm(x.name)));
-  const out = a.map((x, i) => {
-    const j = firstPass[i] ?? take((y) => entry(y) === entry(x)) ?? take((y) => entryClass(y) === entryClass(x));
-    return { title: x.name, a: i, ...(j !== undefined ? { b: j } : {}) };
+  const left = plans.map((fs) => new Set(fs.map((_, i) => i)));
+  const out: PlanComparison["flows"] = [];
+  plans.forEach((fs, p) => {
+    for (const i of [...left[p]]) {
+      const x = fs[i];
+      left[p].delete(i);
+      const at: (number | null)[] = plans.map(() => null);
+      at[p] = i;
+      for (let q = p + 1; q < plans.length; q++) {
+        const take = (match: (y: PlanFlow) => boolean) => {
+          const j = [...left[q]].find((k) => match(plans[q][k]));
+          if (j !== undefined) left[q].delete(j);
+          return j;
+        };
+        const j = take((y) => norm(y.name) === norm(x.name)) ?? take((y) => entry(y) === entry(x)) ?? take((y) => entryClass(y) === entryClass(x));
+        if (j !== undefined) at[q] = j;
+      }
+      out.push({ title: x.name, at });
+    }
   });
-  for (const j of left) out.push({ title: b[j].name, b: j } as (typeof out)[number]);
   return out;
 }
 
@@ -215,75 +222,75 @@ const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? o
  * from the book (checked against the text in lenses/ousterhout-lens.md and the
  * chapter itself), and the measures are the ones on the page.
  */
-export function note(sides: [PlanSide, PlanSide], rows: ProductRow[], flows: PlanComparison["flows"]): PlanComparison["note"] {
-  const [A, B] = sides;
+export function note(sides: PlanSide[], rows: ProductRow[], flows: PlanComparison["flows"]): PlanComparison["note"] {
   const lines: string[] = [];
-  const wins = { A: 0, B: 0 };
+  const two = sides.length === 2;
+  const winners = new Set<string>();
+  const ends = <T,>(xs: T[], score: (x: T) => number): [T, T] => {
+    const sorted = [...xs].sort((a, b) => score(a) - score(b));
+    return [sorted[0], sorted[sorted.length - 1]];
+  };
 
-  const sa = A.surface;
-  const sb = B.surface;
   const methods = (s: PlanSide["surface"]) => `${plural(s.methods, "public method")}${s.params ? ` with ${plural(s.params, "parameter")}` : ""}`;
   let first = `The chapter's checklist asks: "Does one alternative have a simpler interface than another?"`;
-  if (sa.methods === sb.methods && sa.params === sb.params) first += ` By that count they tie: each asks the rest of the code to learn ${methods(sa)}.`;
+  const [simple, wide] = ends(sides, (s) => s.surface.methods + s.surface.params);
+  if (simple.surface.methods === wide.surface.methods && simple.surface.params === wide.surface.params)
+    first += ` By that count they tie: each asks the rest of the code to learn ${methods(simple.surface)}.`;
   else {
-    const [simple, wide] = sa.methods + sa.params <= sb.methods + sb.params ? [A, B] : [B, A];
-    wins[simple.label]++;
-    first += ` Plan ${simple.label} asks the rest of the code to learn ${methods(simple.surface)}; Plan ${wide.label} asks for ${methods(wide.surface)}.`;
+    winners.add(simple.label);
+    first += ` Plan ${simple.label} asks the rest of the code to learn ${methods(simple.surface)}; ${two ? `Plan ${wide.label}` : `the widest, Plan ${wide.label},`} asks for ${methods(wide.surface)}.`;
   }
-  const ca = A.coupling.arrows;
-  const cb = B.coupling.arrows;
-  if (ca !== cb) {
-    const [less, more] = ca < cb ? [A, B] : [B, A];
-    wins[less.label]++;
-    first += ` ${less.label} also adds fewer arrows between classes (${less.coupling.arrows} to ${more.coupling.arrows}), so fewer classes have to change together.`;
+  const [less, more] = ends(sides, (s) => s.coupling.arrows);
+  if (less.coupling.arrows !== more.coupling.arrows) {
+    first += ` ${less.label === simple.label && winners.size ? `${less.label} also` : `Plan ${less.label}`} adds the fewest arrows between classes (${less.coupling.arrows}, against ${more.coupling.arrows} for ${more.label}), so fewer classes have to change together.`;
+    winners.add(less.label);
   }
+  if (two) first = first.replace("the fewest arrows", "fewer arrows");
   lines.push(first);
 
   // The book's first test: what the caller has to do. A controller driving many steps does work the module could.
   for (const p of flows) {
-    if (p.a === undefined || p.b === undefined) continue;
-    const fa = A.flows[p.a];
-    const fb = B.flows[p.b];
-    if (fa.entryCalls === fb.entryCalls) continue;
-    const [lean, busy] = fa.entryCalls < fb.entryCalls ? [{ s: A, f: fa }, { s: B, f: fb }] : [{ s: B, f: fb }, { s: A, f: fa }];
-    wins[lean.s.label]++;
+    const here = sides.flatMap((s, i) => (p.at[i] === null ? [] : [{ s, f: s.flows[p.at[i]!] }]));
+    if (here.length < 2) continue;
+    const [lean, busy] = ends(here, (x) => x.f.entryCalls);
+    if (lean.f.entryCalls === busy.f.entryCalls) continue;
+    winners.add(lean.s.label);
+    // Every plan tied for leanest is named, so none looks worse than it is.
+    const leanest = here.filter((x) => x.f.entryCalls === lean.f.entryCalls).map((x) => `${x.s.label}'s`);
+    const names = leanest.length === 1 ? leanest[0] : `${leanest.slice(0, -1).join(", ")} and ${leanest[leanest.length - 1]}`;
     lines.push(
-      `In "${p.title}", ${busy.s.label}'s entry point drives ${plural(busy.f.entryCalls, "call")} itself where ${lean.s.label}'s makes ${lean.f.entryCalls}. The book puts that first: "The most important consideration for an interface is ease of use for higher level software."`,
+      `In "${p.title}", ${busy.s.label}'s entry point drives ${plural(busy.f.entryCalls, "call")} itself where ${names} ${leanest.length === 1 ? "makes" : "make"} ${lean.f.entryCalls}. The book puts that first: "The most important consideration for an interface is ease of use for higher level software."`,
     );
     break;
   }
 
-  const apart = rows.filter((r) => r.where !== "both").length;
+  const apart = rows.filter((r) => r.where === "some").length;
   if (apart) lines.push(`They also differ in the product (${plural(apart, "fact")} above), so settle what to build before weighing how.`);
-  else if (wins.A && wins.B)
-    lines.push(`Each plan wins on something. The chapter allows for that: you may "combine features of multiple alternatives into a new design that is better than any of the original choices."`);
+  else if (winners.size > 1)
+    lines.push(`Different plans win on different counts. The chapter allows for that: you may "combine features of multiple alternatives into a new design that is better than any of the original choices."`);
   lines.push("Plans have no code yet, so this weighs interfaces and arrows only, not how much each class hides behind them.");
   return { lines, source: `Ch 11 "Design it Twice"` };
 }
 
 // ---------- in the terminal ----------
 
-const WHERE_HEAD: Record<ProductRow["where"], string> = {
-  different: "Both plans touch these, in different ways",
-  a: "Only in Plan A",
-  b: "Only in Plan B",
-  both: "The same in both",
-};
+const NUMBER = ["", "", "Two", "Three", "Four"];
 
 export function printPlanComparison(c: PlanComparison): string {
-  const [A, B] = c.sides;
-  const out: string[] = [`Two plans, drawn against ${c.base.ref} (${c.base.short})`, `  A: ${A.plan.title} (${A.plan.name})`, `  B: ${B.plan.title} (${B.plan.name})`, ""];
+  const n = c.sides.length;
+  const out: string[] = [`${NUMBER[n] ?? n} plans, drawn against ${c.base.ref} (${c.base.short})`, ...c.sides.map((s) => `  ${s.label}: ${s.plan.title} (${s.plan.name})`), ""];
   out.push("What each adds to the product");
-  for (const where of WHERE_ORDER) {
-    const rows = c.product.filter((r) => r.where === where);
-    if (!rows.length) continue;
-    out.push(`  ${WHERE_HEAD[where]} (${rows.length})`);
-    for (const r of rows) {
-      if (where === "different") out.push(`    - A: ${r.a}`, `      B: ${r.b}`);
-      else out.push(`    - ${r.a ?? r.b}`);
-    }
+  const apart = c.product.filter((r) => r.where === "some");
+  const same = c.product.filter((r) => r.where === "all");
+  if (apart.length) {
+    out.push(`  Where they part ways (${apart.length})`);
+    for (const r of apart) r.cells.forEach((t, i) => out.push(`    ${i === 0 ? "-" : " "} ${c.sides[i].label}: ${t ?? "not in this plan"}`));
   }
-  if (!c.product.length) out.push("  nothing in either plan");
+  if (same.length) {
+    out.push(`  The same in ${n === 2 ? "both" : "all"} (${same.length})`);
+    for (const r of same) out.push(`    - ${r.cells[0]}`);
+  }
+  if (!c.product.length) out.push("  nothing in any plan");
   out.push("", "What the rest of the code must learn (public methods, outside controllers and policies)");
   for (const s of c.sides) {
     out.push(`  ${s.label}: ${s.surface.methods} methods, ${s.surface.params} parameters`);
@@ -298,11 +305,10 @@ export function printPlanComparison(c: PlanComparison): string {
     out.push("", "The same request under each plan");
     for (const p of c.flows) {
       out.push(`  ${p.title}`);
-      for (const s of c.sides) {
-        const i = s.label === "A" ? p.a : p.b;
-        const f = i === undefined ? null : s.flows[i];
+      c.sides.forEach((s, i) => {
+        const f = p.at[i] === null ? null : s.flows[p.at[i]!];
         out.push(`    ${s.label}: ${f ? f.calls.join(", ") || "no calls" : "not in this plan"}`);
-      }
+      });
     }
   }
   out.push("", `Ousterhout, ${c.note.source}`, ...c.note.lines.map((l) => `  ${l}`));

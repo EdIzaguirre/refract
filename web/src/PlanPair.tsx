@@ -1,3 +1,4 @@
+import type React from "react";
 import type { PlanComparison, PlanSide, ProductPart, ProductRow } from "../../src/shared/types";
 import { Logo } from "./VerdictStrip";
 import { TablesDiagram } from "./tour/Product";
@@ -6,19 +7,22 @@ import { Mermaid } from "./Mermaid";
 import { toMermaid } from "./ClassPanel";
 
 /**
- * Two plans for one goal, side by side: Ousterhout's "design it twice".
+ * Two to four plans for one goal, side by side: Ousterhout's "design it twice".
  * Product first, then what the rest of the code must learn, how tangled each
  * plan is, the same request under each, and one short note from the book.
  */
 
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
+const NUMBER = ["", "", "Two", "Three", "Four"];
 const PART: Record<ProductPart, string> = { data: "Data", lifecycles: "Lifecycle", screens: "Screen", permissions: "Permissions", jobs: "Job" };
 
 export function PlanPair({ pair }: { pair: PlanComparison }) {
-  const [A, B] = pair.sides;
-  const apart = pair.product.filter((r) => r.where !== "both");
-  const same = pair.product.filter((r) => r.where === "both");
-  const anyTables = A.product.tables.length + B.product.tables.length > 0;
+  const n = pair.sides.length;
+  const every = n === 2 ? "both" : "all";
+  const apart = pair.product.filter((r) => r.where === "some");
+  const same = pair.product.filter((r) => r.where === "all");
+  const anyTables = pair.sides.some((s) => s.product.tables.length > 0);
+  const cols = { "--n": n } as React.CSSProperties;
   const problems = pair.sides.filter((s) => s.plan.problems.length);
   return (
     <div className="app">
@@ -29,9 +33,9 @@ export function PlanPair({ pair }: { pair: PlanComparison }) {
             Refract
           </div>
           <div className="refs">
-            <span>{A.drawing.repo.name}</span>
+            <span>{pair.sides[0].drawing.repo.name}</span>
             <span className="range-line">
-              <b>Two plans</b> for one goal, drawn against <b>{pair.base.ref}</b> as it is today
+              <b>{NUMBER[n] ?? n} plans</b> for one goal, drawn against <b>{pair.base.ref}</b> as it is today
             </span>
           </div>
         </div>
@@ -42,7 +46,7 @@ export function PlanPair({ pair }: { pair: PlanComparison }) {
             <div className="stop-meta">
               Design it twice <span className="plan-tag">planned</span>
             </div>
-            <div className="pair-cols">
+            <div className="pair-cols" style={cols}>
               {pair.sides.map((s) => (
                 <div key={s.label} className="pair-head">
                   <span className="pair-label">Plan {s.label}</span>
@@ -62,22 +66,24 @@ export function PlanPair({ pair }: { pair: PlanComparison }) {
               <h3>What each plan adds to the product</h3>
               <p className="stop-explain">
                 {apart.length === 0
-                  ? `Both plans build the same product: ${plural(same.length, "change")} to tables, states, screens and rules. The difference is only in the code.`
+                  ? `${n === 2 ? "Both plans" : `All ${n} plans`} build the same product: ${plural(same.length, "change")} to tables, states, screens and rules. The difference is only in the code.`
                   : `They agree on ${plural(same.length, "thing")} and part ways on ${apart.length}.`}
               </p>
-              {apart.length > 0 && <Rows rows={apart} />}
+              {apart.length > 0 && <Rows rows={apart} labels={pair.sides.map((s) => s.label)} />}
               {same.length > 0 && (
                 <details className="product-more" open={apart.length === 0}>
-                  <summary>The same in both ({same.length})</summary>
+                  <summary>
+                    The same in {every} ({same.length})
+                  </summary>
                   <ul>
                     {same.map((r, i) => (
-                      <li key={i}>{r.a}</li>
+                      <li key={i}>{r.cells[0]}</li>
                     ))}
                   </ul>
                 </details>
               )}
               {anyTables && (
-                <div className="pair-cols">
+                <div className="pair-cols" style={cols}>
                   {pair.sides.map((s) => (
                     <div key={s.label} className="product planned pair-tables">
                       <div className="pane-tag">Plan {s.label}: tables</div>
@@ -93,16 +99,16 @@ export function PlanPair({ pair }: { pair: PlanComparison }) {
               <p className="product-note">
                 The public methods each plan adds outside controllers, policies, jobs and mailers (those are screens, rules and emails above). Each one is something a caller has to know about.
               </p>
-              <div className="pair-cols">
+              <div className="pair-cols" style={cols}>
                 {pair.sides.map((s) => (
-                  <Surface key={s.label} side={s} max={Math.max(A.surface.methods, B.surface.methods, 1)} />
+                  <Surface key={s.label} side={s} max={Math.max(1, ...pair.sides.map((x) => x.surface.methods))} />
                 ))}
               </div>
             </section>
 
             <section className="product-part">
               <h3>How tangled each plan is</h3>
-              <div className="pair-cols">
+              <div className="pair-cols" style={cols}>
                 {pair.sides.map((s) => (
                   <Tangle key={s.label} side={s} />
                 ))}
@@ -121,10 +127,10 @@ export function PlanPair({ pair }: { pair: PlanComparison }) {
                 {pair.flows.map((p, i) => (
                   <div key={i} className="pair-flow">
                     <h4>{p.title}</h4>
-                    <div className="pair-cols">
-                      {pair.sides.map((s) => {
-                        const at = s.label === "A" ? p.a : p.b;
-                        const f = at === undefined ? null : s.flows[at];
+                    <div className="pair-cols" style={cols}>
+                      {pair.sides.map((s, k) => {
+                        const at = p.at[k];
+                        const f = at === null ? null : s.flows[at];
                         return (
                           <div key={s.label} className="pair-cell">
                             <div className="pane-tag">Plan {s.label}</div>
@@ -164,25 +170,27 @@ export function PlanPair({ pair }: { pair: PlanComparison }) {
   );
 }
 
-function Rows({ rows }: { rows: ProductRow[] }) {
+function Rows({ rows, labels }: { rows: ProductRow[]; labels: string[] }) {
   return (
-    <div className="pair-rows" role="table" aria-label="Product facts by plan">
+    <div className="pair-rows" role="table" aria-label="Product facts by plan" style={{ "--n": labels.length } as React.CSSProperties}>
       <div className="pair-row head" role="row">
         <span role="columnheader" />
-        <span role="columnheader">Plan A</span>
-        <span role="columnheader">Plan B</span>
+        {labels.map((l) => (
+          <span key={l} role="columnheader">
+            Plan {l}
+          </span>
+        ))}
       </div>
       {rows.map((r, i) => (
-        <div key={i} className={`pair-row ${r.where}`} role="row">
+        <div key={i} className="pair-row" role="row">
           <span className="part" role="cell">
             {PART[r.part]}
           </span>
-          <span role="cell" className={r.a ? "" : "absent"}>
-            {r.a ?? "not in this plan"}
-          </span>
-          <span role="cell" className={r.b ? "" : "absent"}>
-            {r.b ?? "not in this plan"}
-          </span>
+          {r.cells.map((t, k) => (
+            <span key={k} role="cell" className={t ? "" : "absent"}>
+              {t ?? "not in this plan"}
+            </span>
+          ))}
         </div>
       ))}
     </div>

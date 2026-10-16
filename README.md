@@ -51,7 +51,7 @@ refract trace main..feature   # trace request flows by running the relevant test
 refract areas --draft         # ask Claude Code to draft your business areas
 refract --plan feature-x      # draw a plan against today's code, before the branch exists
 refract plan check feature-x  # the plan against what the branch built
-refract --plan x-a --vs x-b   # two plans for one goal, side by side (design it twice)
+refract --plan x-a --vs x-b,x-c   # two to four plans for one goal, side by side (design it twice)
 ```
 
 `refract` and `refract watch` start a local server on <http://127.0.0.1:4100> (or the next free port) and open your browser. `--port`, `--no-open` and `--quiet <seconds>` (how long a watched branch must be quiet before the lenses run on their own; default 180) are available.
@@ -106,7 +106,7 @@ flows:
 
 ### Design it twice
 
-Ousterhout's Ch 11 asks for "multiple options for each major design decision". `refract --plan <a> --vs <b>` draws two plans for the same goal against the same code and lays them side by side, product first:
+Ousterhout's Ch 11 asks for "multiple options for each major design decision". `refract --plan <a> --vs <b>,<c>` draws two to four plans for the same goal against the same code and lays them side by side, product first. Add `--base <branch>` to draw them against a shared core branch instead of the default branch:
 
 - **What each plan adds to the product**: the tables, states, screens, rules and jobs where they part ways (with each plan's tables drawn), then what they share.
 - **What the rest of the code must learn**: the public methods each plan adds outside controllers, policies, jobs and mailers, with their parameters.
@@ -114,7 +114,7 @@ Ousterhout's Ch 11 asks for "multiple options for each major design decision". `
 - **The same request under each plan**: flows paired by name (or by the action they start from), as sequence diagrams, with how many calls the entry point makes itself.
 - **One short Ousterhout note**, argued from Ch 11's own questions ("Does one alternative have a simpler interface than another?", "ease of use for higher level software"). Plans have no code, so it weighs interfaces and arrows only.
 
-Edit either file and the page follows. `refract plan compare <a> <b>` prints the same in the terminal. In Claude Code, `/refract plan --two <name>` drafts two genuinely different plans (`<name>-a` and `<name>-b`), opens them side by side, and once you pick one, saves it as `<name>` so the branch's Plan check uses it.
+Edit any of the files and the page follows. `refract plan compare <a> <b> [c] [d]` prints the same in the terminal. In Claude Code, `/refract plan --two <name>` (or `--three`, `--four`) drafts genuinely different plans (`<name>-a`, `<name>-b`, ...), opens them side by side, and once you pick one, saves it as `<name>` so the branch's Plan check uses it. Four is the limit: past that the columns stop fitting and the comparison stops being one you can hold in your head.
 
 `refract plan format` prints the full format, `refract plan context` lists today's tables, states, controllers, policies and classes to plan against, and `refract plan path <name>` says where a plan goes. Parameters count only when the plan writes the parentheses, so `assign_numbers!` leaves them open and `assign_numbers!()` says there are none.
 

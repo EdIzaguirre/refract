@@ -524,9 +524,10 @@ export interface PlanCheck {
 
 // ---------- two plans, side by side ----------
 
-/** One plan in a side-by-side comparison of two designs for the same goal. */
+/** One plan in a side-by-side comparison of two to four designs for the same goal. */
 export interface PlanSide {
-  label: "A" | "B";
+  /** A, B, C or D. */
+  label: string;
   plan: PlanInfo;
   product: ProductChanges;
   /** The plan drawn over today's code, trimmed to the classes it adds or reshapes, what they point at, and the arrows among them. */
@@ -539,23 +540,23 @@ export interface PlanSide {
   flows: { name: string; sequence: Sequence; calls: string[]; steps: number; entryCalls: number }[];
 }
 
-/** One product fact, and which plan has it. */
+/** One product fact, and what each plan says about it. */
 export interface ProductRow {
   part: ProductPart;
   /** Table, lifecycle, screen, policy or job name. */
   subject: string;
-  a?: string;
-  b?: string;
-  /** "both": the same in both plans. "different": both touch it, in different ways. */
-  where: "both" | "different" | "a" | "b";
+  /** Each plan's version, in the order of the sides; null where a plan leaves it alone. */
+  cells: (string | null)[];
+  /** "all": the same in every plan. "some": the plans part ways on it. */
+  where: "all" | "some";
 }
 
 export interface PlanComparison {
   base: { ref: string; short: string };
-  sides: [PlanSide, PlanSide];
+  sides: PlanSide[];
   product: ProductRow[];
-  /** The same request under each plan, as indexes into each side's flows. */
-  flows: { title: string; a?: number; b?: number }[];
+  /** The same request under each plan: per side, an index into its flows, or null where it does not draw it. */
+  flows: { title: string; at: (number | null)[] }[];
   /** A short note from the Ousterhout lens, argued from Ch 11 "Design it Twice". */
   note: { lines: string[]; source: string };
 }

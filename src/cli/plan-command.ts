@@ -2,7 +2,7 @@ import type { PlanCheck, PlanStatus } from "../shared/types.js";
 import type { Workspace } from "../core/workspace.js";
 import { PLAN_FORMAT, loadPlan } from "../core/plan.js";
 import { parseSchema, readLifecycles } from "../core/product.js";
-import { printPlanComparison } from "../core/plan-compare.js";
+import { MAX_PLANS, printPlanComparison } from "../core/plan-compare.js";
 import { surpriseLead, themeCounts } from "../shared/plan-words.js";
 
 /**
@@ -11,7 +11,7 @@ import { surpriseLead, themeCounts } from "../shared/plan-words.js";
  *   refract plan format          the file format, with an example
  *   refract plan context         today's tables, lifecycles, screens, rules and classes, to plan against
  *   refract plan check [name]    what Refract could not read, then the plan against the branch's build
- *   refract plan compare a b     two plans for one goal, side by side
+ *   refract plan compare a b ... two to four plans for one goal, side by side
  */
 export async function runPlanCommand(ws: Workspace, args: string[], flags: Record<string, string | boolean>): Promise<void> {
   const [sub = "path", nameArg] = args;
@@ -47,17 +47,17 @@ export async function runPlanCommand(ws: Workspace, args: string[], flags: Recor
       return out(lines.join("\n"));
     }
     case "compare": {
-      const [, a, b] = args;
-      if (!a || !b) throw new Error("refract plan compare needs two plan names: refract plan compare <a> <b>");
-      const plans = await Promise.all([a, b].map(async (n) => {
+      const names = args.slice(1);
+      if (names.length < 2 || names.length > MAX_PLANS) throw new Error(`refract plan compare takes 2 to ${MAX_PLANS} plan names: refract plan compare <a> <b> [c] [d]`);
+      const plans = await Promise.all(names.map(async (n) => {
         const p = await loadPlan(ws.planPath(n), n);
         if (!p) throw new Error(`No plan at ${ws.planPath(n)}`);
         return p;
       }));
       const lines: string[] = [];
       for (const p of plans) if (p.problems.length) lines.push(`Refract could not read parts of ${p.file}:`, ...p.problems.map((x) => `  - ${x}`), "");
-      const { base, from } = await ws.planBase(typeof flags.base === "string" ? flags.base : a);
-      const c = await ws.comparePlans(plans[0], plans[1], base, from);
+      const { base, from } = await ws.planBase(names[0], typeof flags.base === "string" ? flags.base : undefined);
+      const c = await ws.comparePlans(plans, base, from);
       if (flags.json) return out(JSON.stringify(c, null, 2));
       lines.push(printPlanComparison(c));
       return out(lines.join("\n"));
