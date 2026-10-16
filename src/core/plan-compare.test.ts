@@ -45,15 +45,15 @@ describe("two plans side by side", () => {
   });
 
   it("lays out product facts, interfaces, arrows and the same request under each", async () => {
-    const c = await ws.comparePlans(parsePlan(A, "a.yml"), parsePlan(B, "b.yml"), "main", "main");
+    const c = await ws.comparePlans([parsePlan(A, "a.yml"), parsePlan(B, "b.yml")], "main", "main");
     expect(c.base.ref).toBe("main");
     const [a, b] = c.sides;
 
     // Product first: both add receipts, with different columns, and only B adds a resend action.
     const receipts = c.product.find((r) => r.subject === "receipts")!;
-    expect(receipts.where).toBe("different");
-    expect(receipts.a).toBe("New table receipts: sent_at, order_id");
-    expect(c.product.find((r) => r.part === "screens")).toMatchObject({ where: "different", b: "Orders: adds refund, resend" });
+    expect(receipts.where).toBe("some");
+    expect(receipts.cells[0]).toBe("New table receipts: sent_at, order_id");
+    expect(c.product.find((r) => r.part === "screens")).toMatchObject({ where: "some", cells: ["Orders: adds refund", "Orders: adds refund, resend"] });
 
     // Controllers are screens, not interface: A's surface is the Receipts service, B's one method on Order.
     expect(a.surface).toMatchObject({ methods: 2, params: 2 });
@@ -62,7 +62,7 @@ describe("two plans side by side", () => {
     expect(b.surface.classes[0]).toMatchObject({ name: "Order", isNew: false });
 
     // The same request pairs up by name, whatever the case.
-    expect(c.flows).toEqual([{ title: "customer pays", a: 0, b: 0 }]);
+    expect(c.flows).toEqual([{ title: "customer pays", at: [0, 0] }]);
     expect(a.flows[0].entryCalls).toBe(1);
     expect(b.flows[0].entryCalls).toBe(2);
     expect(b.flows[0].calls).toEqual(["OrdersController → Order#receipt_email", "OrdersController → ReceiptEmailJob.perform_later"]);
@@ -77,15 +77,45 @@ describe("two plans side by side", () => {
     expect(note).toContain('"Does one alternative have a simpler interface than another?" Plan B');
     expect(note).toContain("ease of use for higher level software");
     expect(note).toMatch(/differ in the product/);
-    expect(printPlanComparison(c)).toContain("Both plans touch these, in different ways");
+    expect(printPlanComparison(c)).toContain("Where they part ways");
   });
 
   it("calls two plans with the same product a tie on product, and offers combining when each wins once", async () => {
     const same = A.replace("depends_on: [ReceiptEmailJob, Order]", "depends_on: [ReceiptEmailJob, Order, User]");
     const fewer = A.replace("public: [send_for(order), resend(order)]", "public: [send_for(order)]").replace("depends_on: [ReceiptEmailJob, Order]", "depends_on: [ReceiptEmailJob, Order, User, Checkout]");
-    const c = await ws.comparePlans(parsePlan(same, "a.yml"), parsePlan(fewer, "b.yml"), "main", "main");
-    expect(c.product.every((r) => r.where === "both")).toBe(true);
+    const c = await ws.comparePlans([parsePlan(same, "a.yml"), parsePlan(fewer, "b.yml")], "main", "main");
+    expect(c.product.every((r) => r.where === "all")).toBe(true);
     expect(c.note.lines.join(" ")).toContain("combine features of multiple alternatives");
+  });
+
+  it("lines up three plans, leaves gaps where a plan skips something, and stops at four", async () => {
+    const C = `
+title: A receipts job
+tables:
+  receipts: { new: true, belongs_to: orders, columns: [sent_at] }
+classes:
+  ReceiptEmailJob:
+    public: [self.deliver(order)]
+`;
+    const plans = [parsePlan(A, "a.yml"), parsePlan(B, "b.yml"), parsePlan(C, "c.yml")];
+    const c = await ws.comparePlans(plans, "main", "main");
+    expect(c.sides.map((s) => s.label)).toEqual(["A", "B", "C"]);
+    // C draws no request, so its cell is empty.
+    expect(c.flows).toEqual([{ title: "customer pays", at: [0, 0, null] }]);
+    // C adds no screen, so the screen row has a gap for it.
+    expect(c.product.find((r) => r.part === "screens")!.cells[2]).toBeNull();
+    // A and C build the same receipts table, B a different one: still a row where they part ways.
+    expect(c.product.find((r) => r.subject === "receipts")).toMatchObject({ where: "some", cells: ["New table receipts: sent_at, order_id", "New table receipts: sent_at, email, order_id", "New table receipts: sent_at, order_id"] });
+    expect(c.note.lines[0]).toContain("the widest, Plan A,");
+    expect(printPlanComparison(c)).toMatch(/^Three plans/);
+    await expect(ws.comparePlans([...plans, ...plans], "main", "main")).rejects.toThrow(/2 to 4 plans/);
+  });
+
+  it("draws plans against a chosen base, not where a branch of the same name left main", async () => {
+    const { base, from } = await ws.planBase("agent/receipts", "agent/receipts");
+    expect(base).toBe(await ws.git.resolve("agent/receipts"));
+    expect(from).toBe("agent/receipts");
+    expect((await ws.planBase("agent/receipts")).base).toBe(await ws.git.mergeBase("main", "agent/receipts"));
   });
 
   it("reads product facts in plain words", () => {

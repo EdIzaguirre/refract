@@ -12,9 +12,9 @@ Usage
   refract trace [range]      trace request flows by running the tests that touch the change
   refract install-command    add the /refract command to Claude Code
   refract --plan <name>      draw a plan against today's code, before the branch exists
-  refract --plan a --vs b    two plans for one goal side by side, to design it twice
+  refract --plan a --vs b    two to four plans for one goal side by side (--vs b,c,d), to design it twice
   refract plan check [name]  the plan against what the branch built (plan path, format, context too)
-  refract plan compare a b   the two plans side by side, in the terminal
+  refract plan compare a b   the plans side by side, in the terminal (up to four names)
 
 Ranges
   (none)        the current branch against where it left the default branch
@@ -26,7 +26,8 @@ Options
   --no-open     do not open a browser
   --repo <dir>  repository to look at (default: current directory)
   --plan <name> with a range, check the branch against this plan instead of its own
-  --vs <name>   with --plan, a second plan to lay beside it
+  --vs <names>  with --plan, up to three more plans to lay beside it, comma-separated or repeated
+  --base <ref>  with --plan, draw against this branch (a shared core branch, say) instead of the default branch
 
 Plans live at ~/.refract/<repo>/plans/<branch>.yml. A branch with a plan opens on
 its Plan check; /refract plan in Claude Code drafts one from the conversation.
@@ -36,16 +37,20 @@ interface Args {
   command: string;
   positional: string[];
   flags: Record<string, string | boolean>;
+  /** Every --vs, split on commas. */
+  vs: string[];
 }
 
 function parse(argv: string[]): Args {
   const flags: Record<string, string | boolean> = {};
   const positional: string[] = [];
+  const vs: string[] = [];
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a.startsWith("--")) {
       const [k, v] = a.slice(2).split("=");
-      if (v !== undefined) flags[k] = v;
+      if (k === "vs") vs.push(...String(v ?? argv[++i] ?? "").split(",").filter(Boolean));
+      else if (v !== undefined) flags[k] = v;
       else if (["port", "repo", "base", "quiet", "plan", "vs"].includes(k)) flags[k] = argv[++i];
       else flags[k] = true;
     } else if (a === "-h") flags.help = true;
@@ -53,7 +58,7 @@ function parse(argv: string[]): Args {
   }
   const commands = ["watch", "diff", "areas", "lenses", "trace", "plan", "install-command", "serve", "help"];
   const command = positional[0] && commands.includes(positional[0]) ? positional.shift()! : "serve";
-  return { command, positional, flags };
+  return { command, positional, flags, vs };
 }
 
 async function main() {
@@ -117,7 +122,8 @@ async function main() {
         open: !args.flags["no-open"],
         quietSeconds: Number(args.flags.quiet ?? 180),
         plan: typeof args.flags.plan === "string" ? args.flags.plan : undefined,
-        vs: typeof args.flags.vs === "string" ? args.flags.vs : undefined,
+        vs: args.vs.length ? args.vs : undefined,
+        base: typeof args.flags.base === "string" ? args.flags.base : undefined,
       });
       return;
     }

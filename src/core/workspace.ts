@@ -109,21 +109,26 @@ export class Workspace {
   }
 
   /**
-   * The commit a plan is drawn against: where the plan's branch left the
-   * default branch, if that branch exists, else the default branch's tip.
+   * The commit a plan is drawn against: the tip of `baseRef` when given (a
+   * shared core branch, say), else where the plan's branch left the default
+   * branch, if that branch exists, else the default branch's tip.
    */
-  async planBase(name: string): Promise<{ base: string; from: string | null }> {
+  async planBase(name: string, baseRef?: string): Promise<{ base: string; from: string | null }> {
+    if (baseRef) return { base: await this.git.resolve(baseRef), from: baseRef };
     const branch = (await this.git.tryResolve(`refs/heads/${name}`)) ?? (await this.git.tryResolve(`refs/remotes/origin/${name}`));
     const main = await this.git.defaultBranch();
     const base = branch && main ? await this.git.mergeBase(main, branch) : null;
     return { base: base ?? (await this.git.resolve(main ?? "HEAD")), from: main ?? null };
   }
 
-  /** Two plans for the same goal, drawn against the same code and laid side by side. */
-  async comparePlans(a: Plan, b: Plan, baseRef: string, from: string | null): Promise<PlanComparison> {
-    const [pa, pb] = await Promise.all([this.previewPlan(a, baseRef), this.previewPlan(b, baseRef)]);
-    const sha = pa.comparison.base.sha;
-    return comparePlans({ ref: from?.replace(/^origin\//, "") ?? sha.slice(0, 9), short: sha.slice(0, 9) }, { plan: a, comparison: pa.comparison }, { plan: b, comparison: pb.comparison });
+  /** Two to four plans for the same goal, drawn against the same code and laid side by side. */
+  async comparePlans(plans: Plan[], baseRef: string, from: string | null): Promise<PlanComparison> {
+    const previews = await Promise.all(plans.map((p) => this.previewPlan(p, baseRef)));
+    const sha = previews[0].comparison.base.sha;
+    return comparePlans(
+      { ref: from?.replace(/^origin\//, "") ?? sha.slice(0, 9), short: sha.slice(0, 9) },
+      plans.map((plan, i) => ({ plan, comparison: previews[i].comparison })),
+    );
   }
 
   /** The plan laid beside what the comparison's head built. */
