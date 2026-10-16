@@ -1,5 +1,6 @@
 import type { Comparison, PlanComparison, PlanSide, ProductChanges, ProductPart, ProductRow, Role, Sequence } from "../shared/types.js";
 import type { Plan, PlanFlow } from "./plan.js";
+import { singularize, underscore } from "./inflect.js";
 import { planInfo } from "./plan-preview.js";
 
 /**
@@ -27,6 +28,7 @@ export function comparePlans(base: { ref: string; short: string }, plans: { plan
   const sides = plans.map((p, i) => side(LABELS[i], p.plan, p.comparison));
   const product = productRows(sides.map((s) => s.product));
   const flows = matchFlows(plans.map((p) => p.plan.flows));
+  sides.forEach((s, i) => (s.own = ownParts(sides, product, i)));
   return { base, sides, product, flows, note: note(sides, product, flows) };
 }
 
@@ -85,7 +87,36 @@ function side(label: string, plan: Plan, c: Comparison): PlanSide {
     entryCalls: f.calls.filter((x) => x.from === 0).length,
   }));
 
-  return { label, plan: planInfo(plan, "preview"), product: c.product!, drawing, surface, coupling, flows };
+  return { label, plan: planInfo(plan, "preview"), product: c.product!, drawing, surface, coupling, flows, own: [] };
+}
+
+const ROLE_NAME: Partial<Record<Role, string>> = { lib: "library", other: "class" };
+
+/**
+ * What only this plan builds: product facts no other plan states the same way, then new classes no other plan creates.
+ * Plans for one goal usually share their `why`, so this is what tells them apart on the page.
+ */
+export function ownParts(sides: PlanSide[], rows: ProductRow[], i: number): string[] {
+  const out: string[] = [];
+  const tables = new Set<string>();
+  for (const r of rows) {
+    const cell = r.cells[i];
+    if (r.where !== "some" || !cell || r.cells.some((c, k) => k !== i && c === cell)) continue;
+    if (r.part === "data") tables.add(r.subject);
+    // "New table invoices: number, ..." says enough before the colon, unless another plan builds it too and the detail is the difference.
+    const alone = r.cells.every((c, k) => k === i || !c);
+    out.push(alone && cell.startsWith("New ") ? `new ${cell.slice(4).split(": ")[0]}` : cell);
+  }
+  const added = (s: PlanSide) => s.drawing.classes.filter((k) => k.planned && k.status === "added" && !PRODUCT_ROLES.includes(k.role));
+  const others = new Set(sides.filter((_, k) => k !== i).flatMap((s) => added(s).map((k) => short(k.name))));
+  for (const k of added(sides[i])) {
+    const name = short(k.name);
+    if (others.has(name)) continue;
+    // A new model is already said by its new table.
+    if (k.role === "model" && [...tables].some((t) => singularize(t) === underscore(name))) continue;
+    out.push(`new ${ROLE_NAME[k.role] ?? k.role} ${name}`);
+  }
+  return out;
 }
 
 /** A planned call tree as a sequence diagram, in the order the plan lists the calls. */
@@ -278,7 +309,7 @@ const NUMBER = ["", "", "Two", "Three", "Four"];
 
 export function printPlanComparison(c: PlanComparison): string {
   const n = c.sides.length;
-  const out: string[] = [`${NUMBER[n] ?? n} plans, drawn against ${c.base.ref} (${c.base.short})`, ...c.sides.map((s) => `  ${s.label}: ${s.plan.title} (${s.plan.name})`), ""];
+  const out: string[] = [`${NUMBER[n] ?? n} plans, drawn against ${c.base.ref} (${c.base.short})`, ...c.sides.flatMap((s) => [`  ${s.label}: ${s.plan.title} (${s.plan.name})`, `     ${s.own.length ? `Only this plan: ${s.own.join("; ")}` : "Builds nothing the others don't; the difference is in the wiring."}`]), ""];
   out.push("What each adds to the product");
   const apart = c.product.filter((r) => r.where === "some");
   const same = c.product.filter((r) => r.where === "all");

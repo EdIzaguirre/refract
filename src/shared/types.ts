@@ -538,6 +538,8 @@ export interface PlanSide {
   coupling: { touched: number; created: number; reshaped: number; arrows: number; crossArea: number };
   /** Planned requests: the calls as "Caller → Callee#method", and how many calls the entry point makes itself. */
   flows: { name: string; sequence: Sequence; calls: string[]; steps: number; entryCalls: number }[];
+  /** What only this plan builds, as short phrases: "new table invoices", "new service Billing". Empty when it builds nothing the others don't. */
+  own: string[];
 }
 
 /** One product fact, and what each plan says about it. */

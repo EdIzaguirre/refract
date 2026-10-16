@@ -24,6 +24,9 @@ export function PlanPair({ pair }: { pair: PlanComparison }) {
   const anyTables = pair.sides.some((s) => s.product.tables.length > 0);
   const cols = { "--n": n } as React.CSSProperties;
   const problems = pair.sides.filter((s) => s.plan.problems.length);
+  // Plans for one goal usually share their "why": say it once, and give each card what only that plan builds.
+  const whys = pair.sides.map((s) => s.plan.why?.trim() ?? "");
+  const goal = whys[0] && whys.every((w) => w === whys[0]) ? whys[0] : null;
   return (
     <div className="app">
       <header className="strip">
@@ -46,12 +49,29 @@ export function PlanPair({ pair }: { pair: PlanComparison }) {
             <div className="stop-meta">
               Design it twice <span className="plan-tag">planned</span>
             </div>
+            {goal && (
+              <p className="pair-goal">
+                <span>The goal</span> {goal}
+              </p>
+            )}
             <div className="pair-cols" style={cols}>
               {pair.sides.map((s) => (
                 <div key={s.label} className="pair-head">
                   <span className="pair-label">Plan {s.label}</span>
                   <h2>{s.plan.title}</h2>
-                  {s.plan.why && <p>{s.plan.why}</p>}
+                  {!goal && s.plan.why && <p>{s.plan.why}</p>}
+                  {s.own.length ? (
+                    <div className="pair-own">
+                      <span>Only this plan</span>
+                      <ul>
+                        {s.own.map((t) => (
+                          <li key={t}>{t}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  ) : (
+                    <p className="pair-none">Builds nothing the others don't; the difference is in the wiring below.</p>
+                  )}
                   <code className="pair-file">{s.plan.file}</code>
                 </div>
               ))}
