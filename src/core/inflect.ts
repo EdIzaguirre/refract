@@ -5,7 +5,8 @@ export function singularize(word: string): string {
   if (/ies$/.test(word)) return word.replace(/ies$/, "y");
   if (/(ss|us|is)$/.test(word)) return word;
   if (/(x|ch|sh|ss)es$/.test(word)) return word.replace(/es$/, "");
-  if (/ses$/.test(word)) return word.replace(/es$/, "");
+  // As Rails does: "statuses" and "buses" drop "es", but "expenses" and "cases" only "s".
+  if (/(alias|status|bus)es$/.test(word)) return word.replace(/es$/, "");
   if (/s$/.test(word)) return word.replace(/s$/, "");
   return word;
 }
