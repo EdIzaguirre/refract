@@ -80,6 +80,15 @@ describe("two plans side by side", () => {
     expect(printPlanComparison(c)).toContain("Where they part ways");
   });
 
+  it("says on each plan what only it builds, since plans for one goal share their why", async () => {
+    const c = await ws.comparePlans([parsePlan(A, "a.yml"), parsePlan(B, "b.yml")], "main", "main");
+    const [a, b] = c.sides;
+    // Both build receipts, so each keeps its columns; the service is A's alone; B's resend screen is its own.
+    expect(a.own).toEqual(["New table receipts: sent_at, order_id", "Orders: adds refund", "new service Receipts"]);
+    expect(b.own).toEqual(["New table receipts: sent_at, email, order_id", "Orders: adds refund, resend"]);
+    expect(printPlanComparison(c)).toContain("Only this plan: New table receipts: sent_at, order_id; Orders: adds refund; new service Receipts");
+  });
+
   it("calls two plans with the same product a tie on product, and offers combining when each wins once", async () => {
     const same = A.replace("depends_on: [ReceiptEmailJob, Order]", "depends_on: [ReceiptEmailJob, Order, User]");
     const fewer = A.replace("public: [send_for(order), resend(order)]", "public: [send_for(order)]").replace("depends_on: [ReceiptEmailJob, Order]", "depends_on: [ReceiptEmailJob, Order, User, Checkout]");

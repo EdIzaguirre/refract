@@ -573,6 +573,9 @@ a { color: var(--accent); }
 .pair-head p { margin: 0; color: var(--ink); line-height: 1.5; }
 .pair-label { font-family: var(--font-mono); font-size: 0.72rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--accent); }
 .pair-file { color: var(--faint); font-size: 0.74rem; overflow-wrap: anywhere; }
+.pair-goal { margin: 0 0 14px; max-width: 72ch; line-height: 1.5; }
+.pair-goal span, .pair-own span { font-family: var(--font-mono); font-size: 0.72rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); margin-right: 6px; }
+.pair-own ul { margin: 4px 0 0; padding-left: 18px; line-height: 1.45; }
 .pair-problems { margin: 0; color: var(--ask); font-size: 0.88rem; }
 .pair-rows { display: grid; border: 1px solid var(--rule); border-radius: 10px; overflow: hidden; background: var(--surface); }
 .pair-row { display: grid; grid-template-columns: 110px repeat(var(--n, 2), minmax(0, 1fr)); gap: 0; border-top: 1px solid var(--rule); }
