@@ -49,6 +49,8 @@ refract diff main..feature    # the measurements in the terminal (--json for JSO
 refract lenses main..feature  # the lenses, as JSON
 refract trace main..feature   # trace request flows by running the relevant tests
 refract areas --draft         # ask Claude Code to draft your business areas
+refract --plan feature-x      # draw a plan against today's code, before the branch exists
+refract plan check feature-x  # the plan against what the branch built
 ```
 
 `refract` and `refract watch` start a local server on <http://127.0.0.1:4100> (or the next free port) and open your browser. `--port`, `--no-open` and `--quiet <seconds>` (how long a watched branch must be quiet before the lenses run on their own; default 180) are available.
@@ -63,6 +65,45 @@ cd /tmp/shop && refract watch agent/receipts
 # in another terminal, play an agent committing every few seconds:
 scripts/simulate-agent.sh /tmp/shop
 ```
+
+## Plans: design before code, check before merge
+
+A plan is one small YAML file saying what a change intends to do, in the same terms Refract reads from code: tables, lifecycles, screens, permission rules, jobs, classes with their public methods, and call trees. Refract uses it twice.
+
+- **Before code: the preview.** `refract --plan <name>` draws the plan as the "after" side against today's code, in the views you already know. The product page shows the planned tables, states, screens and rules, tagged "planned". The key changes are one per planned class and one per flow, each with its before-and-after drawing and, for a flow, a sequence diagram of the planned calls. In Explore, planned classes are dashed boxes in their business area: width is their planned public methods, height is a fixed placeholder until code exists. Edit the file and the page follows. "What the authors think" reads the plan itself, so the lenses argue with the design rather than with code sizes.
+- **Before merge: the Plan check.** When the branch you open has a plan, the Summary opens on **Plan check**: what was built but never planned (first, since it is the part worth a conversation), what was planned but is missing, what was built differently (a method with other parameters, a class that doesn't use what the plan said), and what was built as planned. Each line opens the class pop-up or the product page at that part. `refract plan check <name>` prints the same list in the terminal. It follows a watched branch commit by commit, so it also shows how much of the plan has landed.
+
+Plans live outside the project, at `~/.refract/<owner>-<repo>/plans/<branch>.yml` (a branch's slashes become folders). In Claude Code, `/refract plan` drafts one from the conversation, checks that Refract can read it, and opens the preview; you argue, and Claude edits the file. Every section is optional:
+
+```yaml
+title: Invoices for approved timesheets
+why: Contractors bill orgs for fees and expenses.
+
+tables:
+  fees:              { new: true, belongs_to: orgs, columns: [name, unit, price_cents:integer] }
+  timesheets:        { add: [sent_at, sent_by_id] }
+lifecycles:
+  Timesheet.state:   { add_states: [sent], moves: [approved -> sent, sent -> paid] }
+screens:
+  Org::Settings::FeesController: [index, new, create]
+  Org::TimesheetsController: [+mark_sent]       # + adds to an existing controller, - removes
+permissions:
+  TimesheetPolicy: [mark_sent?]
+jobs:
+  InvoiceMailer: [invoice_sent]
+classes:
+  TimesheetCharges:
+    note: One home for charge rules.
+    public: [add_fee(fee, qty, by), reprice(charge, cents)]
+    depends_on: [Timesheet, TimesheetCharge, Fee]
+flows:
+  "contractor adds a fee":                      # a flat list: each step calls the next
+    - Org::Timesheets::ChargesController#create
+    - TimesheetCharges#add_fee
+    - TimesheetCharge.create!
+```
+
+`refract plan format` prints the full format, `refract plan context` lists today's tables, states, controllers, policies and classes to plan against, and `refract plan path <name>` says where a plan goes. Parameters count only when the plan writes the parentheses, so `assign_numbers!` leaves them open and `assign_numbers!()` says there are none.
 
 ## Business areas
 
@@ -108,6 +149,7 @@ git commit ──► language reader ──► snapshot ──► compare(base, 
 - `src/core/compare.ts` compares two snapshots: class shapes, method changes, dependency edges, area roll-ups, and the measured deltas behind the verdict.
 - `src/core/product.ts` reads what the change does to the product: tables, columns and foreign keys from `db/schema.rb` at both commits, new migrations, lifecycles in touched models, controller actions, route lines, policy rules, and jobs and mailers. Rails conventions only, nothing guessed.
 - `src/core/story.ts` writes the summary: Claude Code turns the measurements, the diff and the lens questions into key changes, cached in `.git/refract/stories/`; `measuredStory` builds them from the deltas when Claude is not available.
+- `src/core/plan.ts` reads a plan file; `plan-preview.ts` lays it over today's snapshot so the usual comparison draws it, and `plan-check.ts` lays it beside a real comparison and lists what matches, what's missing and what's a surprise. The surprises read as a few topics: Claude names them with the story, and until it has, Refract groups them by the names they share (a new table, its screen and its service).
 - `src/core/lenses.ts` sends each lens its checklist from `lenses/*.md`, the measurements and the diff, and asks for structured questions. The checklists were built from the books with quotes checked word for word; lenses must argue only from them.
 - `src/server/server.ts` serves the app, polls the watched branch every 2 seconds and pushes new comparisons, lens progress and status over Server-Sent Events.
 - `web/` is React and SVG with d3-zoom; ELK lays out each area's class graph; Mermaid draws the sequence diagrams.

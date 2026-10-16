@@ -83,7 +83,7 @@ async function layout(c: Comparison, names: string[]): Promise<Drawing> {
     // Room for the name and for the "service · 113 lines (+76) · 7 public" line under the box.
     const nums = Math.max(
       k.shape.before ? `${ROLE_WORD[k.role]} · ${numbers(k.shape.before, null)}`.length : 0,
-      k.shape.after ? `${ROLE_WORD[k.role]} · ${numbers(k.shape.after, k.shape.before)}`.length : 0,
+      k.shape.after ? `${ROLE_WORD[k.role]} · ${numbers(k.shape.after, k.shape.before, k.sizeUnknown)}`.length : 0,
     );
     const label = Math.max(shortName(k.name).length * 8, nums * 6.4 + 8, 90);
     return { w: Math.max(b?.w ?? 0, a?.w ?? 0, label), h: Math.max(b?.h ?? 0, a?.h ?? 0) + LABEL_TOP + LABEL_BOTTOM };
@@ -181,7 +181,7 @@ function Pane({ drawing, side, onOpen }: { drawing: Drawing; side: "before" | "a
         const present = side === "before" ? r.edge.before > 0 : r.edge.after > 0;
         if (!present) return null;
         const kind = side === "before" ? (r.edge.after === 0 ? "gone" : "same") : r.edge.before === 0 ? "new" : "same";
-        return <path key={i} d={r.path} className={`fig-edge ${kind}`} markerEnd={`url(#${id}-${kind})`} />;
+        return <path key={i} d={r.path} className={`fig-edge ${kind} ${side === "after" && r.edge.planned ? "planned" : ""}`} markerEnd={`url(#${id}-${kind})`} />;
       })}
       {drawing.nodes.map((n) => (
         <Box key={n.change.name} node={n} side={side} onOpen={onOpen} />
@@ -211,8 +211,8 @@ function Box({ node, side, onOpen }: { node: Placed; side: "before" | "after"; o
   const state = side === "before" ? (k.status === "removed" ? "gone" : "plain") : k.status === "added" ? "new" : k.status === "changed" ? "changed" : "plain";
   const space = ns(k.name);
   return (
-    <g className={`fig-box ${state}`} onClick={() => onOpen(k.name)}>
-      <title>{`${k.name}: ${shape.interface} public methods, ${shape.codeLines} lines of code. Click for its shape, request flow and code.`}</title>
+    <g className={`fig-box ${state} ${side === "after" && k.planned ? "planned" : ""}`} onClick={() => onOpen(k.name)}>
+      <title>{`${k.name}: ${shape.interface} public methods, ${side === "after" && k.sizeUnknown ? "planned, so its size is unknown" : `${shape.codeLines} lines of code`}. Click for its shape, request flow and code.`}</title>
       {space && (
         <text className="fig-ns" x={cx} y={node.y + 10} textAnchor="middle">
           {space}::
@@ -223,15 +223,17 @@ function Box({ node, side, onOpen }: { node: Placed; side: "before" | "after"; o
       </text>
       <rect x={cx - d.w / 2} y={node.y + LABEL_TOP} width={d.w} height={d.h} rx={4} />
       <text className="fig-nums" x={cx} y={node.y + LABEL_TOP + d.h + 16} textAnchor="middle">
-        {ROLE_WORD[k.role]} · {numbers(shape, side === "after" ? k.shape.before : null)}
+        {ROLE_WORD[k.role]} · {numbers(shape, side === "after" ? k.shape.before : null, side === "after" && k.sizeUnknown)}
       </text>
     </g>
   );
 }
 
-function numbers(s: Shape, before: Shape | null): string {
-  const lines = `${s.codeLines} lines`;
+function numbers(s: Shape, before: Shape | null, sizeUnknown = false): string {
   const pub = `${s.interface} public`;
+  // A planned class has no code yet, so its height is a placeholder and its line count means nothing.
+  if (sizeUnknown) return `planned · ${pub} · size unknown`;
+  const lines = `${s.codeLines} lines`;
   if (!before) return `${lines} · ${pub}`;
   const dl = s.codeLines - before.codeLines;
   const di = s.interface - before.interface;

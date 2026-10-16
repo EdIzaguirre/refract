@@ -32,7 +32,11 @@ export function RangeLine({ comparison: c, timeline, watching }: { comparison: C
     <div className="range" ref={box}>
       <button className="range-line" onClick={() => setOpen((o) => !o)} aria-expanded={open} title="What is being compared">
         {watching && <span className="live-dot" title={`Watching ${watching} for new commits`} />}
-        {h ? (
+        {c.plan?.mode === "preview" ? (
+          <span title={c.plan.file}>
+            <b>The plan</b> for {c.plan.name}, drawn against <b>{branchName(c.base)}</b> as it is today
+          </span>
+        ) : h ? (
           <span>
             <b>{head}</b>: {work} commit{work === 1 ? "" : "s"} of work since <b>{h.baseRef}</b>
             <span className="range-when">{lastMerge ? ` · caught up with ${h.baseRef} ${ago(lastMerge.date)}` : ` · branched ${ago(h.base.date)}`}</span>

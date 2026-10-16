@@ -1,11 +1,14 @@
 import fs from "node:fs/promises";
-import type { AreaMap, Comparison, Snapshot } from "../shared/types.js";
+import type { AreaMap, Comparison, PlanCheck, Snapshot } from "../shared/types.js";
 import { AreaAssigner, areasFile, inferAreas, loadAreaFile } from "./areas.js";
 import { compare } from "./compare.js";
 import { productChanges } from "./product.js";
 import { Git } from "./git.js";
 import { RubyReader, type Reader } from "./reader.js";
 import { SnapshotStore } from "./snapshot.js";
+import { planFile, type Plan } from "./plan.js";
+import { markPreview, overlayPlan, plannedProduct } from "./plan-preview.js";
+import { checkPlan } from "./plan-check.js";
 
 /** One repository Refract is looking at: its git, its cached snapshots, its areas. */
 export class Workspace {
@@ -71,6 +74,43 @@ export class Workspace {
     });
     c.product = await productChanges(this.git, c);
     return c;
+  }
+
+  /** Where a plan lives: ~/.refract/<repo>/plans/<name>.yml, or a path as given. */
+  planPath(name: string): string {
+    return planFile(this.key, name);
+  }
+
+  /**
+   * The plan drawn as the "after" side of a comparison against `baseRef`.
+   * Returns the snapshot it drew too, so request flows can read the planned calls.
+   */
+  async previewPlan(plan: Plan, baseRef: string): Promise<{ comparison: Comparison; after: Snapshot }> {
+    const base = await this.git.resolve(baseRef);
+    const [before, info] = await Promise.all([this.store.snapshot(base), this.git.commit(base)]);
+    const overlay = overlayPlan(plan, before);
+    const map = await this.areaMap(before);
+    const areas = new AreaAssigner(map, [before, overlay.after]);
+    const c = compare({
+      repo: { name: this.key, root: this.git.root },
+      base: { ...info, ref: baseRef },
+      head: { ...info, ref: plan.name },
+      before,
+      after: overlay.after,
+      changed: overlay.changed,
+      areas,
+      isTest: (f) => this.reader.isTest(f),
+      claims: (f) => this.reader.claims(f),
+    });
+    c.product = await plannedProduct(this.git, plan, before);
+    markPreview(c, overlay, plan);
+    return { comparison: c, after: overlay.after };
+  }
+
+  /** The plan laid beside what the comparison's head built. */
+  async checkPlan(c: Comparison, plan: Plan): Promise<PlanCheck> {
+    const [before, after] = await Promise.all([this.store.snapshot(c.base.sha), this.store.snapshot(c.head.sha)]);
+    return checkPlan(plan, c, before, after);
   }
 
   /**

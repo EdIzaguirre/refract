@@ -185,6 +185,7 @@ async function cachePath(ws: Workspace, c: Comparison): Promise<string> {
   const dir = path.join(await ws.git.gitDir(), "refract", "lenses");
   await fs.mkdir(dir, { recursive: true });
   // v2: the authors speak in their own voice; older reports are asked again.
+  if (c.plan?.mode === "preview") return path.join(dir, `${c.base.sha}-plan-${c.plan.hash}-v2.json`);
   return path.join(dir, `${c.base.sha}-${c.head.sha}-v2.json`);
 }
 
@@ -213,7 +214,11 @@ export async function runLenses(
   };
   onProgress(report);
   const facts = factsFor(c);
-  const diff = await diffFor(ws, c);
+  // A plan has no diff yet: the lenses read the plan itself, and its sizes are placeholders.
+  const diff =
+    c.plan?.mode === "preview"
+      ? `This is a plan, not code: nothing is written yet. The measurements are the plan laid over today's code, so new classes' line counts are placeholders and only their public methods and dependencies are real. Ask about the design the plan commits to (interfaces, dependencies, where responsibilities sit), not about code size.\n\n${await fs.readFile(c.plan.file, "utf8").catch(() => "")}`
+      : await diffFor(ws, c);
   report.lenses = await Promise.all(
     LENSES.map(async (lens): Promise<LensResult> => {
       try {

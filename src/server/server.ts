@@ -4,12 +4,14 @@ import { existsSync } from "node:fs";
 import path from "node:path";
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
-import type { BranchHistory, Comparison, FlowReport, LensReport, ServerEvent, Story, Timeline } from "../shared/types.js";
+import type { BranchHistory, Comparison, FlowReport, LensReport, ServerEvent, Snapshot, Story, Timeline } from "../shared/types.js";
 import { cachedLenses, runLenses } from "../core/lenses.js";
 import { cachedFlows, sequenceFor, traceFlows } from "../core/flows.js";
 import { draftAreas } from "../core/draft-areas.js";
 import { cachedStory, measuredStory, writeStory } from "../core/story.js";
 import type { Workspace } from "../core/workspace.js";
+import { loadPlan, type Plan } from "../core/plan.js";
+import { planInfo, planStory } from "../core/plan-preview.js";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const WEB_DIR = path.resolve(here, "../web");
@@ -21,6 +23,12 @@ export interface ServerOptions {
   port: number;
   open: boolean;
   quietSeconds: number;
+  /**
+   * A plan by name. Without a range it opens the preview: the plan drawn
+   * against today's code. With a range it is the plan the branch is checked
+   * against. Without it, the branch's own plan is checked when there is one.
+   */
+  plan?: string;
 }
 
 /**
@@ -40,6 +48,8 @@ export async function startServer(ws: Workspace, opts: ServerOptions): Promise<v
   const port = await listen(server, opts.port);
   const url = `http://127.0.0.1:${port}/`;
   process.stdout.write(`Refract is showing ${ws.key} at ${url}\n`);
+  if (live.preview) process.stdout.write(`Previewing the plan in ${live.planPath}; edit it and the page follows. Ctrl-C to stop.\n`);
+  else if (live.plan) process.stdout.write(`Checking ${live.watching ?? live.headName} against the plan in ${live.planPath}.\n`);
   if (live.watching) process.stdout.write(`Watching ${live.watching}; new commits appear as they land. Ctrl-C to stop.\n`);
   if (opts.open) openBrowser(url);
   live.start();
@@ -83,6 +93,13 @@ class LiveState {
   private lensedHeads = new Set<string>();
   private stories = new Map<string, Story>();
   private drafting = false;
+  /** The plan in play, if any, and whether the page draws it (preview) or checks the branch against it. */
+  plan: Plan | null = null;
+  planPath: string | null = null;
+  preview = false;
+  private planMtime = 0;
+  /** In a preview, the planned snapshot that request flows read. */
+  private planned: Snapshot | null = null;
 
   constructor(
     readonly ws: Workspace,
@@ -90,6 +107,7 @@ class LiveState {
   ) {}
 
   async init() {
+    if (this.opts.plan && !this.opts.spec && this.opts.watch === undefined) return this.initPreview(this.opts.plan);
     const range = await this.ws.range(this.opts.spec ?? this.opts.watch ?? undefined);
     this.base = range.base;
     this.baseFrom = range.from;
@@ -98,6 +116,12 @@ class LiveState {
     this.watching = this.opts.watch !== undefined ? (this.opts.watch ?? range.branch) : range.branch;
     this.commits = await this.ws.git.commitsBetween(this.base, this.head);
     await this.readHistory();
+    // The plan this branch is checked against: the one named, else the branch's own, when it exists.
+    const planName = this.opts.plan ?? this.watching ?? (range.branch || null);
+    if (planName) {
+      this.planPath = this.ws.planPath(planName);
+      this.plan = await loadPlan(this.planPath, planName);
+    }
     this.setStatus(`Measuring ${this.commits.length} commit${this.commits.length === 1 ? "" : "s"}`);
     await this.compare(this.head);
     this.setStatus("Ready");
@@ -105,7 +129,49 @@ class LiveState {
     this.maybeDraftAreas();
   }
 
+  /** A plan before any code: the base is today's code, and the after side is the plan. */
+  private async initPreview(name: string) {
+    this.preview = true;
+    this.planPath = this.ws.planPath(name);
+    this.plan = await loadPlan(this.planPath, name);
+    if (!this.plan) throw new Error(`No plan at ${this.planPath}. Draft one with /refract plan in Claude Code, or write it by hand (refract plan format shows how).`);
+    // Against where the plan's branch left the default branch, if the branch exists; else the default branch's tip.
+    const branch = (await this.ws.git.tryResolve(`refs/heads/${name}`)) ?? (await this.ws.git.tryResolve(`refs/remotes/origin/${name}`));
+    const main = await this.ws.git.defaultBranch();
+    const base = branch && main ? await this.ws.git.mergeBase(main, branch) : null;
+    this.base = base ?? (await this.ws.git.resolve(main ?? "HEAD"));
+    this.baseFrom = main ?? null;
+    this.head = this.base;
+    this.headName = name;
+    this.watching = null;
+    this.commits = [];
+    this.history = undefined;
+    this.setStatus("Drawing the plan");
+    await this.compare(this.head);
+    this.setStatus("Ready");
+  }
+
+  /** Re-reads the plan when its file changes, so the page follows the edits. */
+  private async watchPlan() {
+    if (!this.planPath) return;
+    let mtime = 0;
+    try {
+      mtime = (await fs.stat(this.planPath)).mtimeMs;
+    } catch {
+      mtime = -1;
+    }
+    if (!this.planMtime) this.planMtime = mtime;
+    if (mtime === this.planMtime) return;
+    this.planMtime = mtime;
+    this.plan = mtime < 0 ? null : await loadPlan(this.planPath, this.plan?.name ?? this.opts.plan);
+    if (this.preview && !this.plan) return this.setStatus(`The plan at ${this.planPath} is gone`);
+    await this.refreshAll(this.plan?.problems.length ? `Plan updated, with ${this.plan.problems.length} line${this.plan.problems.length === 1 ? "" : "s"} Refract could not read` : "Plan updated");
+    if (this.preview) this.broadcast({ type: "story", payload: await this.story(this.head) });
+  }
+
   start() {
+    setInterval(() => this.watchPlan().catch((e) => this.setStatus(`Plan error: ${(e as Error).message}`)), 1500);
+    if (this.preview) return;
     if (this.watching) setInterval(() => this.poll().catch((e) => this.setStatus(`Watch error: ${(e as Error).message}`)), 2000);
     // Lenses run on their own once the branch has been quiet for a while.
     setInterval(() => this.autoLenses(), 5000);
@@ -141,8 +207,21 @@ class LiveState {
   compare(head: string): Promise<Comparison> {
     const key = `${this.base}:${head}`;
     let c = this.comparisons.get(key);
+    if (!c && this.preview) {
+      c = this.ws.previewPlan(this.plan!, this.base).then(({ comparison, after }) => {
+        this.planned = after;
+        comparison.base.ref = this.baseFrom ?? "base";
+        return comparison;
+      });
+      c.catch(() => this.comparisons.delete(key));
+      this.comparisons.set(key, c);
+    }
     if (!c) {
-      c = this.ws.compare(this.base, head).then((x) => {
+      c = this.ws.compare(this.base, head).then(async (x) => {
+        if (this.plan) {
+          x.plan = planInfo(this.plan, "check");
+          x.planCheck = await this.ws.checkPlan(x, this.plan);
+        }
         x.base.ref = this.baseFrom ?? "base";
         x.head.ref = this.watching ?? this.headName ?? x.head.short;
         return this.baseTip().then((tip) => {
@@ -190,6 +269,7 @@ class LiveState {
 
   /** The tour for a commit: Claude's when written, else the measured one. */
   async story(head: string): Promise<Story> {
+    if (this.preview) return planStory(await this.compare(head), this.plan!);
     const key = `${this.base}:${head}`;
     const mem = this.stories.get(key);
     if (mem) return mem;
@@ -206,6 +286,7 @@ class LiveState {
   async tellStory(head: string, again = false): Promise<Story> {
     const key = `${this.base}:${head}`;
     const existing = await this.story(head);
+    if (this.preview) return existing;
     if ((existing.source === "claude" && !again) || existing.status === "running" || process.env.REFRACT_NO_STORY) return existing;
     const c = await this.compare(head);
     const running: Story = { ...existing, status: "running" };
@@ -285,10 +366,18 @@ class LiveState {
 
   async refreshAll(message: string) {
     this.comparisons.clear();
+    if (this.preview) this.lenses.clear();
     this.stories.clear();
     const c = await this.compare(this.head);
     this.broadcast({ type: "comparison", payload: c });
     this.setStatus(message);
+  }
+
+  /** The planned after side, in a preview. */
+  async plannedSnapshot(): Promise<Snapshot | null> {
+    if (!this.preview) return null;
+    await this.compare(this.head);
+    return this.planned;
   }
 
   setStatus(message: string) {
@@ -336,6 +425,7 @@ async function route(live: LiveState, req: http.IncomingMessage, res: http.Serve
         story: await live.story(h),
         status: live.status,
         areasPath: live.ws.areasPath,
+        planPath: live.planPath,
       });
     }
     case "/api/compare":
@@ -361,7 +451,7 @@ async function route(live: LiveState, req: http.IncomingMessage, res: http.Serve
       const h = await head();
       const side = q.get("side") === "before" ? "before" : "after";
       const commit = side === "before" ? live.base : h;
-      const snap = await live.ws.store.snapshot(commit);
+      const snap = side === "after" ? ((await live.plannedSnapshot()) ?? (await live.ws.store.snapshot(commit))) : await live.ws.store.snapshot(commit);
       const traced = await live.flowReport(commit, side, false);
       return json(sequenceFor(snap, traced, q.get("class") ?? "", q.get("method") ?? ""));
     }

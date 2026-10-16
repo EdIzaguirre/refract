@@ -33,14 +33,18 @@ export function productCounts(p: ProductChanges): { part: ProductPart; text: str
   return out;
 }
 
-export function ProductPage({ product: p, story, onNext }: { product: ProductChanges; story: Story | null; onNext(): void }) {
+export function ProductPage({ product: p, story, planned = false, onNext }: { product: ProductChanges; story: Story | null; planned?: boolean; onNext(): void }) {
   const caption = (part: ProductPart) => story?.product?.[part];
   const go = (part: ProductPart) => document.getElementById(`product-${part}`)?.scrollIntoView({ behavior: "smooth", block: "start" });
   const dataOnly = p.migrations.filter((m) => !m.schema);
   return (
-    <article className="stop product" key="product">
-      <div className="stop-meta">What changed in the product</div>
-      <h2 className="stop-heading">What this change adds, removes and reshapes</h2>
+    <article className={`stop product ${planned ? "planned" : ""}`} key="product">
+      <div className="stop-meta">
+        {planned ? "What the plan changes in the product" : "What changed in the product"}
+        {planned && <span className="plan-tag">planned</span>}
+      </div>
+      <h2 className="stop-heading">{planned ? "What this plan adds, removes and reshapes" : "What this change adds, removes and reshapes"}</h2>
+      {planned && <p className="planned-note">Nothing here is built yet. Each part is the plan laid over today's schema and code; dashed outlines are planned.</p>}
       <div className="product-counts">
         {productCounts(p).map((c, i) => (
           <button key={i} className="count-chip" onClick={() => go(c.part)}>
@@ -178,7 +182,7 @@ export function ProductPage({ product: p, story, onNext }: { product: ProductCha
         <span />
         <span />
         <button className="btn primary" onClick={onNext}>
-          How the code changed →
+          {planned ? "How the code would change" : "How the code changed"} →
         </button>
       </footer>
     </article>
