@@ -84,6 +84,7 @@ approach: Charges are rows on a new table, priced by one service.
 tables:
   fees:              { new: true, belongs_to: orgs, columns: [name, unit, price_cents:integer] }
   timesheets:        { add: [sent_at, sent_by_id] }
+  invoices:          { add: [billed_to_id], belongs_to: { billed_to: orgs } }   # a map when the column is not <table>_id
 lifecycles:
   Timesheet.state:   { add_states: [sent], moves: [approved -> sent, sent -> paid] }
 screens:

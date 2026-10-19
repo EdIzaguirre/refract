@@ -194,11 +194,14 @@ export function overlayPlan(plan: Plan, before: Snapshot): PlanOverlay {
 
   // 3. Dependencies: what classes say they use, and what new tables belong to.
   for (const k of plan.classes) for (const d of k.dependsOn) depend(edit(k.name, null), d, "reference");
-  for (const { t, model } of tableModels) {
-    const u = edit(model, "model");
-    for (const parent of t.belongsTo) {
-      u.associations.push({ kind: "belongs_to", name: singularize(parent) });
-      depend(u, modelFor(parent), "association");
+  for (const t of plan.tables) {
+    if (!t.belongsTo.length) continue;
+    const u = edit(modelFor(t.name), "model");
+    for (const r of t.belongsTo) {
+      const name = r.column.replace(/_id$/, "");
+      const model = modelFor(r.to);
+      u.associations.push({ kind: "belongs_to", name, ...(name === singularize(r.to) ? {} : { className: model }) });
+      depend(u, model, "association");
     }
   }
 
@@ -247,7 +250,7 @@ export async function plannedProduct(git: Git, plan: Plan, before: Snapshot): Pr
   const tables: TableChange[] = plan.tables.map((t) => {
     const today = schema?.tables.get(t.name);
     const status: ChangeStatus = today ? "changed" : "added";
-    const refs = t.belongsTo.map((to) => ({ to, column: `${singularize(to)}_id`, one: false, status: "added" as ChangeStatus }));
+    const refs = t.belongsTo.map(({ to, column }) => ({ to, column, one: false, status: "added" as ChangeStatus }));
     const keep = today ? [...today.columns.keys()].filter((c) => !t.remove.includes(c) && !t.add.some((a) => a.name === c)) : [];
     const columns = today
       ? [

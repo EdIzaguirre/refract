@@ -4,6 +4,7 @@ import path from "node:path";
 import YAML from "yaml";
 import type { Role } from "../shared/types.js";
 import { homeFor } from "./areas.js";
+import { singularize } from "./inflect.js";
 
 /**
  * A plan: one small file saying what a change intends to do, in the same
@@ -18,11 +19,19 @@ export interface PlanColumn {
   type?: string;
 }
 
+export interface PlanReference {
+  to: string;
+  column: string;
+}
+
 export interface PlanTable {
   name: string;
   isNew: boolean;
-  /** Tables this one points at, plural as in the schema: `belongs_to: orgs` means an org_id column. */
-  belongsTo: string[];
+  /**
+   * Tables this one points at, plural as in the schema, and the column that does it:
+   * `belongs_to: orgs` is org_id, and `belongs_to: { home_site: sites }` is home_site_id pointing at sites.
+   */
+  belongsTo: PlanReference[];
   /** For a new table: its columns. */
   columns: PlanColumn[];
   /** For an existing table: columns to add and to drop. */
@@ -165,7 +174,7 @@ export function parsePlan(text: string, file = "plan.yml", name = path.basename(
     plan.tables.push({
       name: table,
       isNew,
-      belongsTo: list(o.belongs_to),
+      belongsTo: references(o.belongs_to),
       columns: columns(o.columns),
       add: columns(o.add),
       remove: list(o.remove),
@@ -276,6 +285,16 @@ function list(v: unknown): string[] {
   return [String(v)];
 }
 
+/** `orgs`, `[orgs, fees]`, or a map naming the association: `{ home_site: sites }` (Rails' `belongs_to :home_site, class_name: "Site"`). */
+function references(v: unknown): PlanReference[] {
+  const named = (name: string, to: string) => ({ to, column: name.endsWith("_id") ? name : `${name}_id` });
+  const one = (x: unknown): PlanReference[] =>
+    x && typeof x === "object" && !Array.isArray(x)
+      ? Object.entries(x as Record<string, unknown>).map(([name, to]) => named(name, String(to)))
+      : list(x).map((to) => ({ to, column: `${singularize(to)}_id` }));
+  return Array.isArray(v) ? v.flatMap(one) : one(v);
+}
+
 /** Columns as `[name, price_cents:integer]` or `{ name: string, price_cents: integer }`. */
 /**
  * YAML's [a, b] splits on every comma, so "add_fee(fee, qty)" arrives as two
@@ -353,6 +372,7 @@ tables:                                      # db/schema.rb
   fees:              { new: true, belongs_to: orgs, columns: [name, unit, price_cents:integer] }
   timesheet_charges: { new: true, belongs_to: [timesheets, fees], columns: [description, quantity] }
   timesheets:        { add: [sent_at:datetime, sent_by_id], remove: [legacy_total] }
+  invoices:          { add: [billed_to_id], belongs_to: { billed_to: orgs } }   # a map when the column is not <table>_id
 
 lifecycles:                                  # a model's STATES / enum and its TRANSITIONS
   Timesheet.state:

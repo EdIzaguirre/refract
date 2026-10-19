@@ -11,6 +11,13 @@ import { findClass, modelFor } from "./plan-preview.js";
 
 const short = (n: string) => n.split("::").pop() ?? n;
 const andList = (xs: string[]) => (xs.length <= 1 ? (xs[0] ?? "") : `${xs.slice(0, -1).join(", ")} and ${xs[xs.length - 1]}`);
+
+/** The references a planned table should have and the build lacks, matched by table and column: home_site_id is not site_id. */
+export function unbuiltRefs(t: Plan["tables"][number], built: { references: { to: string; column: string }[] } | undefined): string[] {
+  return t.belongsTo
+    .filter((r) => !built?.references.some((b) => b.to === r.to && b.column === r.column))
+    .map((r) => `${r.to} through ${r.column}`);
+}
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 /** A long list reads as its first few names; the rest go in the line's detail. */
 const LONG = 6;
@@ -44,7 +51,7 @@ export function checkPlan(plan: Plan, c: Comparison, before: Snapshot, after: Sn
       }
       const cols = new Set(built.columns.map((x) => x.name));
       const missing = [...t.columns, ...t.add].map((x) => x.name).filter((n) => !cols.has(n));
-      const refs = t.belongsTo.filter((to) => !built.references.some((r) => r.to === to));
+      const refs = unbuiltRefs(t, built);
       add("tables", "built", `The ${t.name} table`, target);
       if (missing.length) add("tables", "different", `${t.name} has no ${andList(missing)} column${missing.length === 1 ? "" : "s"}`, target);
       if (refs.length) add("tables", "different", `${t.name} does not point at ${andList(refs)}`, target);
@@ -66,6 +73,8 @@ export function checkPlan(plan: Plan, c: Comparison, before: Snapshot, after: Sn
       if (noRemove.length) add("tables", "missing", `Dropping ${andList(noRemove)} from ${t.name}`, target);
       const extra = [...addedCols].filter((n) => !wantAdd.includes(n));
       if (extra.length) add("tables", "surprise", `${t.name} also got ${andList(extra)}`, target, undefined, [t.name, ...extra]);
+      const refs = unbuiltRefs(t, built);
+      if (built && refs.length) add("tables", "different", `${t.name} does not point at ${andList(refs)}`, target);
     }
   }
   for (const t of p.tables) {

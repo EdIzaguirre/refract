@@ -3,7 +3,7 @@ import { makeSampleRepo } from "../test/sample.js";
 import { Workspace } from "./workspace.js";
 import { PLAN_FORMAT, parsePlan, signature } from "./plan.js";
 import { planStory } from "./plan-preview.js";
-import { wordsOf } from "./plan-check.js";
+import { unbuiltRefs, wordsOf } from "./plan-check.js";
 import { checkThemes } from "./story.js";
 import { surpriseLead, themeCounts } from "../shared/plan-words.js";
 import { sequenceFor } from "./flows.js";
@@ -34,7 +34,13 @@ describe("plan files", () => {
     expect(p.name).toBe("ofr-updates");
     expect(p.title).toBe("Invoices for approved timesheets");
     const fees = p.tables.find((t) => t.name === "fees")!;
-    expect(fees).toMatchObject({ isNew: true, belongsTo: ["orgs"] });
+    expect(fees).toMatchObject({ isNew: true, belongsTo: [{ to: "orgs", column: "org_id" }] });
+    // A map names the column when it is not <table>_id, as Rails' class_name does.
+    expect(p.tables.find((t) => t.name === "invoices")!.belongsTo).toEqual([{ to: "orgs", column: "billed_to_id" }]);
+    expect(parsePlan("tables:\n  x: { new: true, belongs_to: [orgs, { owner_id: users }] }\n").tables[0].belongsTo).toEqual([
+      { to: "orgs", column: "org_id" },
+      { to: "users", column: "owner_id" },
+    ]);
     expect(fees.columns).toContainEqual({ name: "price_cents", type: "integer" });
     expect(p.tables.find((t) => t.name === "timesheets")).toMatchObject({ isNew: false, remove: ["legacy_total"] });
     expect(p.lifecycles[0]).toMatchObject({ model: "Timesheet", field: "state", addStates: ["sent"] });
@@ -102,6 +108,20 @@ describe("plans against the sample shop", () => {
     const story = planStory(c, plan);
     expect(story.stops[0].title).toBe("A new service: Receipts");
     expect(story.stops.some((s) => s.title === "How it runs: customer pays")).toBe(true);
+  });
+
+  it("draws a column added to an existing table as a dependency on the table it points at", async () => {
+    const plan = parsePlan("tables:\n  orders: { add: [billed_to_id], belongs_to: { billed_to: checkouts } }\n", "billing.yml");
+    const { comparison: c } = await ws.previewPlan(plan, "main");
+    expect(c.product!.tables[0].references).toEqual([{ to: "checkouts", column: "billed_to_id", one: false, status: "added" }]);
+    expect(c.edges.find((e) => e.from === "Order" && e.to === "Checkout")).toMatchObject({ planned: true });
+  });
+
+  it("checks a reference by its column as well as its table", () => {
+    const t = parsePlan("tables:\n  matters: { add: [home_site_id], belongs_to: { home_site: sites } }\n").tables[0];
+    // Built on the court's site_id instead of a new column: still a reference to sites, but not the planned one.
+    expect(unbuiltRefs(t, { references: [{ to: "sites", column: "site_id" }] })).toEqual(["sites through home_site_id"]);
+    expect(unbuiltRefs(t, { references: [{ to: "sites", column: "home_site_id" }] })).toEqual([]);
   });
 
   it("lists what was built, what is missing, what is a surprise and what differs", async () => {
