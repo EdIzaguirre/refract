@@ -152,7 +152,7 @@ export function PlanPair({ pair }: { pair: PlanComparison }) {
                 {today
                   ? "Dashed boxes are planned; classes with no arrows are left out. Green arrows are new dependencies the plan adds; grey ones are there today."
                   : `Only the new dependencies are drawn${shared.size ? `: those ${every} plans add once, then each plan's own` : ""}. Dashed boxes are planned.`}{" "}
-                Bands run top to bottom: controllers and views (helpers, components), then services and jobs, then models, so an arrow pointing up stands out. Each box carries its role as a coloured pill.
+                Bands run top to bottom: controllers, views (helpers and components), services and jobs, then models, so an arrow pointing up stands out. Each box carries its role as a coloured pill.
               </p>
             </section>
 

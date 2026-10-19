@@ -25,14 +25,15 @@ const PAD = 24;
 const HEAD = 26;
 
 /**
- * Rails layers, top to bottom: what handles a request, what does the work,
- * what holds the data. Each is a band, so where a box sits says what kind of
+ * Rails layers, top to bottom: what handles a request, what it renders, what
+ * does the work, what holds the data. Each is a band, so where a box sits says what kind of
  * class it is, and an arrow pointing up (a model reaching into a service) stands out.
  * A concern sits with services: it is mixed into a class, not a table.
  */
 const LAYERS: { title: string; roles: Role[] }[] = [
-  // Helpers and view components serve what a controller renders, so they share its band.
-  { title: "Controllers and views", roles: ["controller", "component", "helper"] },
+  { title: "Controllers", roles: ["controller"] },
+  // Helpers and view components serve what a controller renders, so they sit just below it.
+  { title: "Views", roles: ["component", "helper"] },
   { title: "Services and jobs", roles: ["service", "job", "mailer", "policy", "lib", "concern", "other"] },
   { title: "Models", roles: ["model"] },
 ];
