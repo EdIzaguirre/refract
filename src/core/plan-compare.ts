@@ -111,7 +111,8 @@ function side(label: string, plan: Plan, c: Comparison): PlanSide {
     .map((k) => ({ name: k.name, role: k.role, change: statedChange(k, findPlanned(k.name), plan.flows, sigs) }));
 
   // Only what the plan touches and what it points at, so the page stays small.
-  const keep = new Set(planned.map((k) => k.name));
+  const arrows = c.edges.filter((e) => e.planned);
+  const keep = new Set([...planned.map((k) => k.name), ...arrows.flatMap((e) => [e.from, e.to])]);
   const drawing: Comparison = {
     ...c,
     classes: c.classes.filter((k) => keep.has(k.name)),

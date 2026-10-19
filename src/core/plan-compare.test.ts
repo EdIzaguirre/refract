@@ -3,6 +3,7 @@ import { makeSampleRepo } from "../test/sample.js";
 import { Workspace } from "./workspace.js";
 import { parsePlan } from "./plan.js";
 import { printPlanComparison, productFacts } from "./plan-compare.js";
+import { newDependencies, sharedDependencies } from "../shared/plan-dependencies.js";
 import { sharedSurface, surfaceClasses } from "../shared/plan-surface.js";
 import { singularize } from "./inflect.js";
 
@@ -69,6 +70,16 @@ describe("two plans side by side", () => {
     expect(b.flows[0].entryCalls).toBe(2);
     expect(b.flows[0].calls).toEqual(["OrdersController → Order#receipt_email", "OrdersController → ReceiptEmailJob.perform_later"]);
     expect(a.flows[0].sequence.messages.map((m) => `${m.from}>${m.to}.${m.label}`)).toEqual(["OrdersController>Receipts.send_for", "Receipts>ReceiptEmailJob.perform_later"]);
+
+    // The drawing keeps only what the plan touches and what it points at.
+    expect(a.drawing.classes.map((k) => k.name).sort()).toEqual(["Order", "OrdersController", "ReceiptEmailJob", "Receipts", "Receipt"].sort());
+
+    // Both plans add a receipts table that belongs to orders, so that dependency is drawn once; the rest are each plan's own.
+    const shared = sharedDependencies(c.sides);
+    expect([...shared]).toEqual(["Receipt → Order"]);
+    expect(newDependencies(a, shared).map((e) => `${e.from} → ${e.to}`).sort()).toEqual(["OrdersController → Receipts", "Receipts → Order", "Receipts → ReceiptEmailJob"]);
+    // B's only new dependency is the shared one, so B has nothing of its own to draw.
+    expect(newDependencies(b, shared)).toEqual([]);
 
     // Existing code each plan touches: B adds to Order, A leaves it alone; both add a refund screen to OrdersController.
     const order = c.existing.find((r) => r.name === "Order")!;
