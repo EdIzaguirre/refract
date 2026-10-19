@@ -278,7 +278,7 @@ const NUMBER = ["", "", "Two", "Three", "Four"];
 
 export function printPlanComparison(c: PlanComparison): string {
   const n = c.sides.length;
-  const out: string[] = [`${NUMBER[n] ?? n} plans, drawn against ${c.base.ref} (${c.base.short})`, ...c.sides.map((s) => `  ${s.label}: ${s.plan.title} (${s.plan.name})`), ""];
+  const out: string[] = [`${NUMBER[n] ?? n} plans, drawn against ${c.base.ref} (${c.base.short})`, ...c.sides.flatMap((s) => [`  ${s.label}: ${s.plan.title} (${s.plan.name})`, ...(s.plan.approach ? [`     ${s.plan.approach}`] : [])]), ""];
   out.push("What each adds to the product");
   const apart = c.product.filter((r) => r.where === "some");
   const same = c.product.filter((r) => r.where === "all");

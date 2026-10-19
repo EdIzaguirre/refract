@@ -1,5 +1,7 @@
 import type React from "react";
-import type { PlanComparison, PlanSide, ProductPart, ProductRow } from "../../src/shared/types";
+import { useMemo, useState } from "react";
+import type { Comparison, PlanComparison, PlanSide, ProductPart, ProductRow } from "../../src/shared/types";
+import { dependencyKey, newDependencies, sharedDependencies } from "../../src/shared/plan-dependencies";
 import { Logo } from "./VerdictStrip";
 import { TablesDiagram } from "./tour/Product";
 import { ROLE_WORD, StopDiagram, shortName } from "./tour/StopDiagram";
@@ -8,6 +10,7 @@ import { toMermaid } from "./ClassPanel";
 
 /**
  * Two to four plans for one goal, side by side: Ousterhout's "design it twice".
+ * They share a goal, so each heading says how the plan differs (its approach), not why.
  * Product first, then what the rest of the code must learn, how tangled each
  * plan is, the same request under each, and one short note from the book.
  */
@@ -24,6 +27,8 @@ export function PlanPair({ pair }: { pair: PlanComparison }) {
   const anyTables = pair.sides.some((s) => s.product.tables.length > 0);
   const cols = { "--n": n } as React.CSSProperties;
   const problems = pair.sides.filter((s) => s.plan.problems.length);
+  const [today, setToday] = useState(false);
+  const shared = useMemo(() => sharedDependencies(pair.sides), [pair]);
   return (
     <div className="app">
       <header className="strip">
@@ -51,7 +56,7 @@ export function PlanPair({ pair }: { pair: PlanComparison }) {
                 <div key={s.label} className="pair-head">
                   <span className="pair-label">Plan {s.label}</span>
                   <h2>{s.plan.title}</h2>
-                  {s.plan.why && <p>{s.plan.why}</p>}
+                  {s.plan.approach && <p>{s.plan.approach}</p>}
                   <code className="pair-file">{s.plan.file}</code>
                 </div>
               ))}
@@ -113,12 +118,26 @@ export function PlanPair({ pair }: { pair: PlanComparison }) {
                   <Tangle key={s.label} side={s} />
                 ))}
               </div>
+              <label className="pair-toggle">
+                <input type="checkbox" checked={today} onChange={(e) => setToday(e.target.checked)} /> Also draw the dependencies that are there today
+              </label>
               <div className="pair-drawings">
-                {pair.sides.map((s) => (
-                  <Drawing key={s.label} side={s} />
-                ))}
+                {today ? (
+                  pair.sides.map((s) => <Drawing key={s.label} side={s} />)
+                ) : (
+                  <>
+                    {shared.size > 0 && <NewDrawing side={pair.sides[0]} keep={(k) => shared.has(k)} tag={`The same in ${every} plans`} />}
+                    {pair.sides.map((s) => (
+                      <NewDrawing key={s.label} side={s} keep={(k) => !shared.has(k)} tag={shared.size ? `Plan ${s.label} only` : `Plan ${s.label}`} />
+                    ))}
+                  </>
+                )}
               </div>
-              <p className="product-note">Dashed boxes are planned; classes with no arrows are left out. Green arrows are new dependencies the plan adds; grey ones are there today. Boxes sit in Rails layers: controllers, then services and jobs, then models.</p>
+              <p className="product-note">
+                {today
+                  ? "Dashed boxes are planned; classes with no arrows are left out. Green arrows are new dependencies the plan adds; grey ones are there today. Boxes sit in Rails layers: controllers, then services and jobs, then models."
+                  : `Only the new dependencies are drawn${shared.size ? `: those ${every} plans add once, then each plan's own` : ""}. Dashed boxes are planned. Boxes sit in Rails layers: controllers, then services and jobs, then models.`}
+              </p>
             </section>
 
             {pair.flows.length > 0 && (
@@ -252,6 +271,25 @@ function Drawing({ side: s }: { side: PlanSide }) {
   return (
     <div className="pair-cell">
       <StopDiagram comparison={s.drawing} classes={classes} onOpen={() => {}} only={{ side: "after", tag: `Plan ${s.label}` }} />
+    </div>
+  );
+}
+
+/** Only the new dependencies `keep` picks, and the classes at their ends. */
+function NewDrawing({ side: s, keep, tag }: { side: PlanSide; keep(key: string): boolean; tag: string }) {
+  const drawing = useMemo((): Comparison => ({ ...s.drawing, edges: newDependencies(s).filter((e) => keep(dependencyKey(e))) }), [s, tag]);
+  const linked = new Set(drawing.edges.flatMap((e) => [e.from, e.to]));
+  const classes = drawing.classes.map((c) => c.name).filter((n) => linked.has(n));
+  return (
+    <div className="pair-cell">
+      {classes.length ? (
+        <StopDiagram comparison={drawing} classes={classes} onOpen={() => {}} only={{ side: "after", tag }} />
+      ) : (
+        <>
+          <div className="pane-tag">{tag}</div>
+          <p className="pair-none">No new dependencies of its own.</p>
+        </>
+      )}
     </div>
   );
 }

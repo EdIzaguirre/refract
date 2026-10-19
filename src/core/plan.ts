@@ -104,6 +104,8 @@ export interface Plan {
   hash: string;
   title: string;
   why?: string;
+  /** One or two sentences on what sets this design apart from the others for the same goal. */
+  approach?: string;
   tables: PlanTable[];
   lifecycles: PlanLifecycle[];
   screens: PlanScreen[];
@@ -155,6 +157,7 @@ export function parsePlan(text: string, file = "plan.yml", name = path.basename(
   const problem = (msg: string) => plan.problems.push(msg);
   if (typeof doc.title === "string") plan.title = doc.title;
   if (typeof doc.why === "string") plan.why = doc.why;
+  if (typeof doc.approach === "string") plan.approach = doc.approach;
 
   for (const [table, v] of entries(doc.tables, "tables", problem)) {
     const o = asMap(v);
@@ -247,7 +250,7 @@ export function parsePlan(text: string, file = "plan.yml", name = path.basename(
     plan.flows.push(f);
   }
 
-  const known = new Set(["title", "why", "tables", "lifecycles", "screens", "permissions", "jobs", "classes", "flows"]);
+  const known = new Set(["title", "why", "approach", "tables", "lifecycles", "screens", "permissions", "jobs", "classes", "flows"]);
   for (const k of Object.keys(doc)) if (!known.has(k)) problem(`Refract does not know the section "${k}"; it was left out.`);
   return plan;
 }
@@ -344,6 +347,7 @@ export const PLAN_FORMAT = `# A Refract plan: what a change intends to do, befor
 
 title: Invoices for approved timesheets     # one line
 why: Contractors bill orgs for fees and expenses.
+approach: Charges are rows on a new table, priced by one service.   # one or two sentences; shown when plans are compared side by side
 
 tables:                                      # db/schema.rb
   fees:              { new: true, belongs_to: orgs, columns: [name, unit, price_cents:integer] }

@@ -3,11 +3,13 @@ import { makeSampleRepo } from "../test/sample.js";
 import { Workspace } from "./workspace.js";
 import { parsePlan } from "./plan.js";
 import { printPlanComparison, productFacts } from "./plan-compare.js";
+import { newDependencies, sharedDependencies } from "../shared/plan-dependencies.js";
 import { singularize } from "./inflect.js";
 
 // Two designs for one goal: a Receipts service the controller calls once, or the controller doing it all.
 const A = `
 title: Receipts in one place
+approach: One Receipts service owns sending; the controller calls it once.
 tables:
   receipts: { new: true, belongs_to: orders, columns: [sent_at] }
 screens:
@@ -71,6 +73,13 @@ describe("two plans side by side", () => {
     // The drawing keeps only what the plan touches and what it points at.
     expect(a.drawing.classes.map((k) => k.name).sort()).toEqual(["Order", "OrdersController", "ReceiptEmailJob", "Receipts", "Receipt"].sort());
 
+    // Both plans add a receipts table that belongs to orders, so that dependency is drawn once; the rest are each plan's own.
+    const shared = sharedDependencies(c.sides);
+    expect([...shared]).toEqual(["Receipt → Order"]);
+    expect(newDependencies(a, shared).map((e) => `${e.from} → ${e.to}`).sort()).toEqual(["OrdersController → Receipts", "Receipts → Order", "Receipts → ReceiptEmailJob"]);
+    // B's only new dependency is the shared one, so B has nothing of its own to draw.
+    expect(newDependencies(b, shared)).toEqual([]);
+
     // The note quotes Ch 11 and says plans weigh interfaces only.
     const note = c.note.lines.join(" ");
     expect(c.note.source).toBe('Ch 11 "Design it Twice"');
@@ -78,6 +87,9 @@ describe("two plans side by side", () => {
     expect(note).toContain("ease of use for higher level software");
     expect(note).toMatch(/differ in the product/);
     expect(printPlanComparison(c)).toContain("Where they part ways");
+    // Each plan says how it differs; B has no approach, so it prints only its title.
+    expect(a.plan.approach).toBe("One Receipts service owns sending; the controller calls it once.");
+    expect(printPlanComparison(c)).toContain("A: Receipts in one place (a)\n     One Receipts service owns sending; the controller calls it once.\n  B: The controller sends receipts (b)\n");
   });
 
   it("calls two plans with the same product a tie on product, and offers combining when each wins once", async () => {
