@@ -1,6 +1,7 @@
 import type { Comparison, PlanComparison, PlanSide, ProductChanges, ProductPart, ProductRow, Role, Sequence } from "../shared/types.js";
 import type { Plan, PlanFlow } from "./plan.js";
 import { planInfo } from "./plan-preview.js";
+import { sharedMethods, surfaceClasses } from "../shared/plan-surface.js";
 
 /**
  * Two to four plans for the same goal, side by side: Ousterhout's "design it
@@ -292,9 +293,19 @@ export function printPlanComparison(c: PlanComparison): string {
   }
   if (!c.product.length) out.push("  nothing in any plan");
   out.push("", "What the rest of the code must learn (public methods, outside controllers and policies)");
+  const sameMethods = sharedMethods(c.sides);
+  const listMethods = (classes: ReturnType<typeof surfaceClasses>) => {
+    for (const k of classes) out.push(`    ${k.name}${k.isNew ? " (new)" : ""}: ${k.methods.map((m) => (k.isNew ? m : `+${m}`)).join(", ")}`);
+  };
+  if (sameMethods.size) {
+    out.push(`  The same in ${n === 2 ? "both" : "all"}: ${plural(sameMethods.size, "method")}`);
+    listMethods(surfaceClasses(c.sides[0], (k) => sameMethods.has(k)));
+  }
   for (const s of c.sides) {
-    out.push(`  ${s.label}: ${s.surface.methods} methods, ${s.surface.params} parameters`);
-    for (const k of s.surface.classes) out.push(`    ${short(k.name)}${k.isNew ? " (new)" : ""}: ${k.methods.join(", ")}`);
+    out.push(`  ${s.label}: ${s.surface.methods} methods, ${s.surface.params} parameters${sameMethods.size ? ", of its own:" : ""}`);
+    const own = surfaceClasses(s, (k) => !sameMethods.has(k));
+    if (sameMethods.size && !own.length) out.push("    none");
+    listMethods(own);
   }
   out.push("", "How tangled");
   for (const s of c.sides) {

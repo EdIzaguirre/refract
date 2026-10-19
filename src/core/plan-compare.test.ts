@@ -4,6 +4,7 @@ import { Workspace } from "./workspace.js";
 import { parsePlan } from "./plan.js";
 import { printPlanComparison, productFacts } from "./plan-compare.js";
 import { newDependencies, sharedDependencies } from "../shared/plan-dependencies.js";
+import { sharedMethods, surfaceClasses } from "../shared/plan-surface.js";
 import { singularize } from "./inflect.js";
 
 // Two designs for one goal: a Receipts service the controller calls once, or the controller doing it all.
@@ -90,6 +91,19 @@ describe("two plans side by side", () => {
     // Each plan says how it differs; B has no approach, so it prints only its title.
     expect(a.plan.approach).toBe("One Receipts service owns sending; the controller calls it once.");
     expect(printPlanComparison(c)).toContain("A: Receipts in one place (a)\n     One Receipts service owns sending; the controller calls it once.\n  B: The controller sends receipts (b)\n");
+  });
+
+  it("lists the public methods every plan adds once, and each plan's own beneath", async () => {
+    const both = B.replace("public: [receipt_email]", "public: [receipt_email]\n  Receipts:\n    public: [send_for(order)]");
+    const c = await ws.comparePlans([parsePlan(A, "a.yml"), parsePlan(both, "b.yml")], "main", "main");
+    const [a, b] = c.sides;
+    const shared = sharedMethods(c.sides);
+    expect([...shared]).toEqual(["Receipts#send_for(order)"]);
+    expect(surfaceClasses(a, (k) => !shared.has(k))).toEqual([{ name: "Receipts", role: "service", isNew: true, methods: ["resend(order)"] }]);
+    expect(surfaceClasses(b, (k) => !shared.has(k)).map((k) => `${k.name}: ${k.methods}`)).toEqual(["Order: receipt_email"]);
+    // Totals still count every method a plan adds, shared or not.
+    expect(a.surface.methods).toBe(2);
+    expect(printPlanComparison(c)).toContain("The same in both: 1 method\n    Receipts (new): send_for(order)\n  A: 2 methods, 2 parameters, of its own:\n    Receipts (new): resend(order)\n  B: 2 methods, 1 parameter");
   });
 
   it("calls two plans with the same product a tie on product, and offers combining when each wins once", async () => {
