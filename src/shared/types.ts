@@ -533,8 +533,11 @@ export interface PlanSide {
   product: ProductChanges;
   /** The plan drawn over today's code, trimmed to the classes it adds or reshapes, what they point at, and the arrows among them. */
   drawing: Comparison;
-  /** What the rest of the code must learn: the public methods the plan adds outside controllers, policies, jobs and mailers. */
-  surface: { classes: { name: string; role: Role; isNew: boolean; methods: string[]; params: number }[]; methods: number; params: number };
+  /**
+   * What the rest of the code must learn: the public methods and associations the plan adds outside
+   * controllers, policies, jobs and mailers. A new model is listed even with neither: it is new persistence.
+   */
+  surface: { classes: { name: string; role: Role; isNew: boolean; methods: string[]; associations: string[]; params: number }[]; methods: number; params: number };
   /** How tangled: classes the plan touches and the arrows it adds between classes and between business areas. */
   coupling: { touched: number; created: number; reshaped: number; arrows: number; crossArea: number };
   /** Planned requests: the calls as "Caller → Callee#method", and how many calls the entry point makes itself. */

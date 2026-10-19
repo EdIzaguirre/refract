@@ -2,7 +2,6 @@ import { useEffect, useState } from "react";
 import ELK, { type ElkExtendedEdge } from "elkjs/lib/elk.bundled.js";
 import type { ChangeStatus, ProductChanges, ProductPart, Story, TableChange } from "../../../src/shared/types";
 import { splinePath } from "../map/layout";
-import { singularize } from "../../../src/core/inflect";
 
 /**
  * The first page of the summary: what the change does to the product, read
@@ -61,7 +60,7 @@ export function ProductPage({ product: p, story, planned = false, onNext }: { pr
           {p.tables.length > 0 && <TablesDiagram tables={p.tables} />}
           {p.tables.length > 0 && (
             <p className="product-note">
-              Each arrow is a belongs-to: the table it starts from holds the column that points at the other. The table says so in a row, the Rails way: <b>belongs to site</b>, with the column that does it. Each site can then have many of those rows, or only one where the row says <b>one per site</b> (a unique index). Green arrows are new. Hover an arrow for its column.
+              Each arrow runs from the table holding the column to the table it points at, labelled with the line its model carries: <b>belongs_to :home_site</b>. The table it points at can have many such rows, or one where the label says <b>unique</b>. Green arrows are new. Hover an arrow for the full sentence.
             </p>
           )}
           {dataOnly.length > 0 && (
@@ -252,18 +251,8 @@ interface TableBox {
 
 function boxFor(t: TableChange | null, name: string): Omit<TableBox, "x" | "y"> {
   if (!t) return { name, status: "unchanged", rows: [], more: null, w: Math.max(80, name.length * 7.4 + 20), h: HEAD };
-  // Each reference reads as Rails says it, "belongs to site", in place of its foreign-key column, so the
-  // arrow needs no "one" or "many" word whose direction a reader has to guess.
-  const refs = t.references.filter((r) => r.to !== t.name && (t.status === "added" || r.status !== "unchanged"));
-  const fk = new Set(refs.map((r) => r.column));
-  const belongs = refs.map((r) => ({
-    text: `belongs to ${singularize(r.to)}${r.one ? `, one per ${singularize(r.to)}` : ""}`,
-    type: r.column,
-    status: r.status,
-  }));
-  const cols = t.columns.filter((c) => !fk.has(c.name) && !(t.status === "added" && t.references.some((r) => r.column === c.name)));
-  const rows = [...belongs, ...cols.map((c) => ({ text: c.name, type: c.type, status: c.status }))].slice(0, MAX_ROWS);
-  const extra = belongs.length + cols.length - rows.length;
+  const rows = t.columns.slice(0, MAX_ROWS).map((c) => ({ text: c.name, type: c.type, status: c.status }));
+  const extra = t.columns.length - rows.length;
   const more = [extra > 0 ? `${extra} more` : "", t.otherColumns ? `${t.otherColumns} unchanged columns` : ""].filter(Boolean).join(" · ") || null;
   const wide = Math.max(name.length * 7.6 + (t.status === "changed" ? 0 : 34), ...rows.map((r) => (r.text.length + r.type.length + 3) * 6.3), more ? more.length * 5.8 : 0);
   return { name, status: t.status, rows, more, w: Math.max(110, wide + 24), h: HEAD + rows.length * ROW + (more ? ROW : 0) + 6 };
@@ -271,8 +260,18 @@ function boxFor(t: TableChange | null, name: string): Omit<TableBox, "x" | "y"> 
 
 const elk = new ELK();
 
+interface Words {
+  x: number;
+  y: number;
+  anchor: "start" | "end";
+  text: string;
+}
+
+/** The line the model holding the column carries, so the label reads one way only: `belongs_to :home_site`. */
+const associationLabel = (r: { column: string; one: boolean }) => `belongs_to :${r.column.replace(/_id$/, "")}${r.one ? " (unique)" : ""}`;
+
 export function TablesDiagram({ tables }: { tables: TableChange[] }) {
-  const [drawing, setDrawing] = useState<{ width: number; height: number; boxes: TableBox[]; edges: { path: string; status: ChangeStatus; label: string }[] } | null>(null);
+  const [drawing, setDrawing] = useState<{ width: number; height: number; boxes: TableBox[]; edges: { path: string; status: ChangeStatus; label: string; words: Words }[] } | null>(null);
   useEffect(() => {
     let stale = false;
     const byName = new Map(tables.map((t) => [t.name, t]));
@@ -302,9 +301,15 @@ export function TablesDiagram({ tables }: { tables: TableChange[] }) {
           "elk.layered.spacing.nodeNodeBetweenLayers": "46",
           "elk.edgeRouting": "SPLINES",
           "elk.aspectRatio": "2.2",
+          "elk.edgeLabels.inline": "false",
+          "elk.spacing.edgeLabel": "4",
         },
         children: boxes.map((b) => ({ id: b.name, width: b.w, height: b.h })),
-        edges: refs.map((r, i) => ({ id: `r${i}`, sources: [r.from], targets: [r.to], r }) as ElkExtendedEdge & { r: (typeof refs)[number] }),
+        // Each arrow carries its label as ELK's edge label, so the layout leaves room for it.
+        edges: refs.map((r, i) => {
+          const text = associationLabel(r);
+          return { id: `r${i}`, sources: [r.from], targets: [r.to], labels: [{ text, width: text.length * 6.2, height: 12 }], r } as ElkExtendedEdge & { r: (typeof refs)[number] };
+        }),
       })
       .then((g) => {
         if (stale) return;
@@ -316,10 +321,13 @@ export function TablesDiagram({ tables }: { tables: TableChange[] }) {
           const pts = [s.startPoint, ...(s.bendPoints ?? []), s.endPoint].map((p) => ({ x: p.x + PAD, y: p.y + PAD }));
           const word = { added: "New reference", removed: "Removed reference", unchanged: "Existing reference", changed: "Reference" }[e.r.status];
           const has = e.r.one ? `has at most one ${e.r.from} row (${e.r.column} has a unique index)` : `can have many ${e.r.from} rows`;
+          const at = e.labels?.[0];
+          const words = { x: (at?.x ?? pts[0].x) + PAD, y: (at?.y ?? pts[0].y) + PAD + 10, anchor: "start" as const, text: associationLabel(e.r) };
           return [
             {
               path: splinePath(pts),
               status: e.r.status,
+              words,
               label: `${word}: ${e.r.from}.${e.r.column} points at ${e.r.to}. Each ${e.r.from} row belongs to one ${e.r.to} row, and each ${e.r.to} row ${has}.`,
             },
           ];
@@ -375,6 +383,12 @@ export function TablesDiagram({ tables }: { tables: TableChange[] }) {
               </text>
             )}
           </g>
+        ))}
+        {/* Drawn after the boxes so no box covers them. */}
+        {drawing.edges.map((e, i) => (
+          <text key={`w${i}`} className={`tbl-card ${e.status === "added" ? "new" : ""}`} x={e.words.x} y={e.words.y} textAnchor={e.words.anchor}>
+            {e.words.text}
+          </text>
         ))}
       </svg>
     </div>

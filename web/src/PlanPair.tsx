@@ -2,7 +2,7 @@ import type React from "react";
 import { useMemo, useState } from "react";
 import type { Comparison, PlanComparison, PlanSide, ProductPart, ProductRow } from "../../src/shared/types";
 import { dependencyKey, newDependencies, sharedDependencies } from "../../src/shared/plan-dependencies";
-import { sharedMethods, surfaceClasses } from "../../src/shared/plan-surface";
+import { type SurfaceItem, byLayer, methodCount, sharedSurface, surfaceClasses } from "../../src/shared/plan-surface";
 import { Logo } from "./VerdictStrip";
 import { TablesDiagram } from "./tour/Product";
 import { ROLE_WORD, StopDiagram } from "./tour/StopDiagram";
@@ -30,7 +30,8 @@ export function PlanPair({ pair }: { pair: PlanComparison }) {
   const problems = pair.sides.filter((s) => s.plan.problems.length);
   const [today, setToday] = useState(false);
   const shared = useMemo(() => sharedDependencies(pair.sides), [pair]);
-  const sameMethods = useMemo(() => sharedMethods(pair.sides), [pair]);
+  const sameSurface = useMemo(() => sharedSurface(pair.sides), [pair]);
+  const sameClasses = useMemo(() => surfaceClasses(pair.sides[0], (k) => sameSurface.has(k)), [pair, sameSurface]);
   return (
     <div className="app">
       <header className="strip">
@@ -106,17 +107,17 @@ export function PlanPair({ pair }: { pair: PlanComparison }) {
               <p className="product-note">
                 The public methods each plan adds outside controllers, policies, jobs and mailers (those are screens, rules and emails above). Each one is something a caller has to know about.
               </p>
-              {sameMethods.size > 0 && (
+              {sameClasses.length > 0 && (
                 <div className="pair-cell">
                   <div className="pane-tag">
-                    The same in {every} plans: {plural(sameMethods.size, "public method")}
+                    The same in {every} plans: {plural(methodCount(sameClasses), "public method")}
                   </div>
-                  <SurfaceGroups classes={surfaceClasses(pair.sides[0], (k) => sameMethods.has(k))} />
+                  <SurfaceLayers classes={sameClasses} />
                 </div>
               )}
               <div className="pair-cols" style={cols}>
                 {pair.sides.map((s) => (
-                  <Surface key={s.label} side={s} shared={sameMethods} max={Math.max(1, ...pair.sides.map((x) => x.surface.methods))} />
+                  <Surface key={s.label} side={s} shared={sameSurface} max={Math.max(1, ...pair.sides.map((x) => x.surface.methods))} />
                 ))}
               </div>
             </section>
@@ -228,7 +229,6 @@ function Rows({ rows, labels }: { rows: ProductRow[]; labels: string[] }) {
 
 function Surface({ side: s, shared, max }: { side: PlanSide; shared: Set<string>; max: number }) {
   const own = surfaceClasses(s, (k) => !shared.has(k));
-  const ownCount = own.reduce((n, k) => n + k.methods.length, 0);
   return (
     <div className="pair-cell">
       <div className="pane-tag">{shared.size ? `Plan ${s.label} only` : `Plan ${s.label}`}</div>
@@ -236,55 +236,58 @@ function Surface({ side: s, shared, max }: { side: PlanSide; shared: Set<string>
         {plural(s.surface.methods, "public method")}
         <span>
           {plural(s.surface.params, "parameter")}
-          {shared.size > 0 && ` · ${ownCount} of its own`}
+          {shared.size > 0 && ` · ${methodCount(own)} of its own`}
         </span>
       </div>
       <div className="pair-bar" aria-hidden>
         <i style={{ width: `${(100 * s.surface.methods) / max}%` }} />
       </div>
-      {s.surface.classes.length === 0 && <p className="pair-none">No new public methods outside controllers and policies.</p>}
-      {s.surface.classes.length > 0 && own.length === 0 && <p className="pair-none">None of its own: every one is shared, above.</p>}
-      <SurfaceGroups classes={own} />
+      {s.surface.classes.length === 0 && <p className="pair-none">No new public methods or models outside controllers and policies.</p>}
+      {s.surface.classes.length > 0 && own.length === 0 && <p className="pair-none">None of its own: everything is shared, above.</p>}
+      <SurfaceLayers classes={own} />
     </div>
   );
 }
 
-function SurfaceGroups({ classes }: { classes: SurfaceClasses }) {
+/**
+ * Models, then services, then other classes: persistence apart from logic. In each, a new class
+ * is all new interface; an existing one gains what is marked +.
+ */
+function SurfaceLayers({ classes }: { classes: SurfaceItem[] }) {
   return (
     <>
-      <SurfaceGroup title="New classes" classes={classes.filter((k) => k.isNew)} />
-      <SurfaceGroup title="Added to existing classes" classes={classes.filter((k) => !k.isNew)} />
+      {byLayer(classes).map((l) => (
+        <div key={l.title} className="pair-group">
+          <h4>{l.title}</h4>
+          <ul className="pair-classes">
+            {l.classes.map((k) => (
+              <li key={k.name} className={k.isNew ? "new" : "existing"}>
+                <div className="pair-class-name">
+                  <b>{k.name}</b>
+                  <span className="pair-small">
+                    {k.isNew ? "new" : "existing"} {ROLE_WORD[k.role]}
+                  </span>
+                </div>
+                {k.methods.length + k.associations.length > 0 ? (
+                  <div className="pair-sigs">
+                    {k.associations.map((a) => (
+                      <code key={a} className="assoc">
+                        {k.isNew ? a : `+ ${a}`}
+                      </code>
+                    ))}
+                    {k.methods.map((m) => (
+                      <code key={m}>{k.isNew ? m : `+ ${m}`}</code>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="pair-none">No associations or public methods: persistence only.</p>
+                )}
+              </li>
+            ))}
+          </ul>
+        </div>
+      ))}
     </>
-  );
-}
-
-type SurfaceClasses = ReturnType<typeof surfaceClasses>;
-
-/** One kind of class: a brand-new one is all new interface; an existing one gains the methods marked +. */
-function SurfaceGroup({ title, classes }: { title: string; classes: SurfaceClasses }) {
-  if (!classes.length) return null;
-  const isNew = classes[0].isNew;
-  return (
-    <div className={`pair-group ${isNew ? "new" : "existing"}`}>
-      <h4>{title}</h4>
-      <ul className="pair-classes">
-        {classes.map((k) => (
-          <li key={k.name}>
-            <div className="pair-class-name">
-              <b>{k.name}</b>
-              <span className="pair-small">
-                {isNew ? "new" : "existing"} {ROLE_WORD[k.role]}
-              </span>
-            </div>
-            <div className="pair-sigs">
-              {k.methods.map((m) => (
-                <code key={m}>{isNew ? m : `+ ${m}`}</code>
-              ))}
-            </div>
-          </li>
-        ))}
-      </ul>
-    </div>
   );
 }
 

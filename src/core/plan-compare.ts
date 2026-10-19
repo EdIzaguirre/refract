@@ -1,7 +1,7 @@
-import type { Comparison, PlanComparison, PlanSide, ProductChanges, ProductPart, ProductRow, Role, Sequence } from "../shared/types.js";
+import type { AssociationFacts, Comparison, PlanComparison, PlanSide, ProductChanges, ProductPart, ProductRow, Role, Sequence } from "../shared/types.js";
 import type { Plan, PlanFlow } from "./plan.js";
 import { planInfo } from "./plan-preview.js";
-import { sharedMethods, surfaceClasses } from "../shared/plan-surface.js";
+import { type SurfaceItem, byLayer, methodCount, sharedSurface, surfaceClasses } from "../shared/plan-surface.js";
 
 /**
  * Two to four plans for the same goal, side by side: Ousterhout's "design it
@@ -31,6 +31,9 @@ export function comparePlans(base: { ref: string; short: string }, plans: { plan
   return { base, sides, product, flows, note: note(sides, product, flows) };
 }
 
+/** An association as its Rails line reads: `belongs_to :home_site, class_name: "Site"`. */
+const associationLine = (a: AssociationFacts) => `${a.kind} :${a.name}${a.className ? `, class_name: "${a.className}"` : ""}`;
+
 function side(label: string, plan: Plan, c: Comparison): PlanSide {
   const planned = c.classes.filter((k) => k.planned);
   const sigs = new Map<string, string>();
@@ -41,7 +44,11 @@ function side(label: string, plan: Plan, c: Comparison): PlanSide {
     if (PRODUCT_ROLES.includes(k.role) || !k.after) continue;
     const had = new Set(k.before?.publicMethods ?? []);
     const added = k.after.publicMethods.filter((m) => !had.has(m));
-    if (!added.length) continue;
+    const isNew = k.status === "added";
+    const hadAssociations = new Set((k.before?.associations ?? []).map(associationLine));
+    const associations = k.after.associations.map(associationLine).filter((a) => !hadAssociations.has(a));
+    // A new model is new persistence even with no methods of its own, so it is always listed.
+    if (!added.length && !associations.length && !(isNew && k.role === "model")) continue;
     let params = 0;
     const methods = added.map((label) => {
       const cls = label.startsWith("self.");
@@ -49,7 +56,7 @@ function side(label: string, plan: Plan, c: Comparison): PlanSide {
       params += k.after!.methods.find((m) => m.name === name && m.scope === (cls ? "class" : "instance"))?.params ?? 0;
       return sigs.get(`${short(k.name)}|${label}`) ?? label;
     });
-    surface.classes.push({ name: k.name, role: k.role, isNew: k.status === "added", methods, params });
+    surface.classes.push({ name: k.name, role: k.role, isNew, methods, associations, params });
     surface.methods += methods.length;
     surface.params += params;
   }
@@ -293,19 +300,26 @@ export function printPlanComparison(c: PlanComparison): string {
   }
   if (!c.product.length) out.push("  nothing in any plan");
   out.push("", "What the rest of the code must learn (public methods, outside controllers and policies)");
-  const sameMethods = sharedMethods(c.sides);
-  const listMethods = (classes: ReturnType<typeof surfaceClasses>) => {
-    for (const k of classes) out.push(`    ${k.name}${k.isNew ? " (new)" : ""}: ${k.methods.map((m) => (k.isNew ? m : `+${m}`)).join(", ")}`);
+  const sameSurface = sharedSurface(c.sides);
+  const list = (classes: SurfaceItem[]) => {
+    for (const l of byLayer(classes)) {
+      out.push(`    ${l.title}`);
+      for (const k of l.classes) {
+        const items = [...k.associations, ...k.methods].map((m) => (k.isNew ? m : `+${m}`));
+        out.push(`      ${k.name}${k.isNew ? " (new)" : ""}: ${items.join(", ") || "persistence only"}`);
+      }
+    }
   };
-  if (sameMethods.size) {
-    out.push(`  The same in ${n === 2 ? "both" : "all"}: ${plural(sameMethods.size, "method")}`);
-    listMethods(surfaceClasses(c.sides[0], (k) => sameMethods.has(k)));
+  const shared = surfaceClasses(c.sides[0], (k) => sameSurface.has(k));
+  if (shared.length) {
+    out.push(`  The same in ${n === 2 ? "both" : "all"}: ${plural(methodCount(shared), "method")}`);
+    list(shared);
   }
   for (const s of c.sides) {
-    out.push(`  ${s.label}: ${s.surface.methods} methods, ${s.surface.params} parameters${sameMethods.size ? ", of its own:" : ""}`);
-    const own = surfaceClasses(s, (k) => !sameMethods.has(k));
-    if (sameMethods.size && !own.length) out.push("    none");
-    listMethods(own);
+    out.push(`  ${s.label}: ${plural(s.surface.methods, "method")}, ${plural(s.surface.params, "parameter")}${shared.length ? ", of its own:" : ""}`);
+    const own = surfaceClasses(s, (k) => !sameSurface.has(k));
+    if (shared.length && !own.length) out.push("    none");
+    list(own);
   }
   out.push("", "How tangled");
   for (const s of c.sides) {
