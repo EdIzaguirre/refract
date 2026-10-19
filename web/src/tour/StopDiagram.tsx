@@ -31,7 +31,8 @@ const HEAD = 26;
  * A concern sits with services: it is mixed into a class, not a table.
  */
 const LAYERS: { title: string; roles: Role[] }[] = [
-  { title: "Controllers", roles: ["controller", "component", "helper"] },
+  // Helpers and view components serve what a controller renders, so they share its band.
+  { title: "Controllers and views", roles: ["controller", "component", "helper"] },
   { title: "Services and jobs", roles: ["service", "job", "mailer", "policy", "lib", "concern", "other"] },
   { title: "Models", roles: ["model"] },
 ];
@@ -240,8 +241,42 @@ function Box({ node, side, onOpen }: { node: Placed; side: "before" | "after"; o
         {shortName(k.name)}
       </text>
       <rect x={cx - d.w / 2} y={node.y + LABEL_TOP} width={d.w} height={d.h} rx={4} />
-      <text className="fig-nums" x={cx} y={node.y + LABEL_TOP + d.h + 16} textAnchor="middle">
-        {ROLE_WORD[k.role]} · {numbers(shape, side === "after" ? k.shape.before : null, side === "after" && k.sizeUnknown)}
+      <RoleLine cx={cx} y={node.y + LABEL_TOP + d.h + 16} role={k.role} text={numbers(shape, side === "after" ? k.shape.before : null, side === "after" && k.sizeUnknown)} />
+    </g>
+  );
+}
+
+/** Pills group the roles by hue: mailers read as jobs, and helpers, components and libraries as other classes. */
+const PILL: Record<Role, string> = {
+  controller: "controller",
+  service: "service",
+  job: "job",
+  mailer: "job",
+  concern: "concern",
+  model: "model",
+  policy: "policy",
+  helper: "other",
+  component: "other",
+  lib: "other",
+  other: "other",
+};
+
+/** The class's role as a coloured pill, then its numbers, centred under the box together. */
+function RoleLine({ cx, y, role, text }: { cx: number; y: number; role: Role; text: string }) {
+  const word = ROLE_WORD[role];
+  const pillW = word.length * 6.3 + 12;
+  const gap = 6;
+  const x0 = cx - (pillW + gap + text.length * 6.4) / 2;
+  return (
+    <g>
+      <g className={`fig-pill ${PILL[role]}`}>
+        <rect x={x0} y={y - 11} width={pillW} height={15} rx={7.5} />
+        <text x={x0 + pillW / 2} y={y} textAnchor="middle">
+          {word}
+        </text>
+      </g>
+      <text className="fig-nums" x={x0 + pillW + gap} y={y}>
+        {text}
       </text>
     </g>
   );

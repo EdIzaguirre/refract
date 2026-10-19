@@ -21,6 +21,14 @@
   --ask: #9a6400;
   --ask-soft: #fbf0d9;
   --code-bg: #f0f2f1;
+  /* One hue per Rails role, for the pills on class drawings: text, then fill. */
+  --role-controller: #2f5fa8; --role-controller-soft: #e3ecf8;
+  --role-service: #0f6e6a; --role-service-soft: #e2f1ef;
+  --role-job: #8a5a00; --role-job-soft: #fbf0d9;
+  --role-concern: #7a3fa0; --role-concern-soft: #f1e6f8;
+  --role-model: #8a4b1f; --role-model-soft: #f6e9df;
+  --role-policy: #a03a5a; --role-policy-soft: #f8e4ea;
+  --role-other: #5b6765; --role-other-soft: #eceeed;
   --shadow: 0 1px 2px rgba(23, 32, 31, 0.06), 0 8px 24px rgba(23, 32, 31, 0.08);
   --font-display: "Newsreader", Georgia, "Times New Roman", serif;
   --font-body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
@@ -33,6 +41,14 @@
     --rule: #2c3735; --grid: #1c2423; --accent: #5cc6bb; --accent-soft: #173431; --accent-mid: #2d6d66;
     --before: #8d9896; --before-soft: #222b2a; --good: #7fcf8e; --good-soft: #1c3322; --bad: #f08a7c;
     --bad-soft: #3a211d; --ask: #e9b65a; --ask-soft: #352a14; --code-bg: #141b1a;
+  --role-controller: #9cb8f0; --role-controller-soft: #1d2a40; --role-service: #5cc6bb; --role-service-soft: #173431;
+  --role-job: #e9b65a; --role-job-soft: #352a14; --role-concern: #d3a1f0; --role-concern-soft: #2e2038;
+  --role-model: #e6a77a; --role-model-soft: #3a2a1e; --role-policy: #f0a0b8; --role-policy-soft: #3a1f28;
+  --role-other: #9aa7a4; --role-other-soft: #222b2a;
+    --role-controller: #9cb8f0; --role-controller-soft: #1d2a40; --role-service: #5cc6bb; --role-service-soft: #173431;
+    --role-job: #e9b65a; --role-job-soft: #352a14; --role-concern: #d3a1f0; --role-concern-soft: #2e2038;
+    --role-model: #e6a77a; --role-model-soft: #3a2a1e; --role-policy: #f0a0b8; --role-policy-soft: #3a1f28;
+    --role-other: #9aa7a4; --role-other-soft: #222b2a;
     --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 8px 24px rgba(0, 0, 0, 0.35);
     color-scheme: dark;
   }
@@ -340,6 +356,15 @@ a { color: var(--accent); }
 .fig-name { font-family: var(--font-body); font-size: 13px; font-weight: 600; fill: var(--ink); }
 .fig-ns { font-family: var(--font-mono); font-size: 9.5px; fill: var(--faint); }
 .fig-nums { font-family: var(--font-mono); font-size: 10.5px; fill: var(--muted); }
+.fig-box .fig-pill rect, .fig-box.planned .fig-pill rect, .fig-box.new .fig-pill rect, .fig-box.changed .fig-pill rect { stroke: none; stroke-dasharray: none; }
+.fig-pill text { font-family: var(--font-mono); font-size: 10px; font-weight: 600; }
+.fig-box .fig-pill.controller rect { fill: var(--role-controller-soft); } .fig-pill.controller text { fill: var(--role-controller); }
+.fig-box .fig-pill.service rect { fill: var(--role-service-soft); } .fig-pill.service text { fill: var(--role-service); }
+.fig-box .fig-pill.job rect { fill: var(--role-job-soft); } .fig-pill.job text { fill: var(--role-job); }
+.fig-box .fig-pill.concern rect { fill: var(--role-concern-soft); } .fig-pill.concern text { fill: var(--role-concern); }
+.fig-box .fig-pill.model rect { fill: var(--role-model-soft); } .fig-pill.model text { fill: var(--role-model); }
+.fig-box .fig-pill.policy rect { fill: var(--role-policy-soft); } .fig-pill.policy text { fill: var(--role-policy); }
+.fig-box .fig-pill.other rect { fill: var(--role-other-soft); } .fig-pill.other text { fill: var(--role-other); }
 .fig-absent rect { fill: none; stroke: var(--rule); stroke-dasharray: 3 4; }
 .fig-absent text { font-family: var(--font-mono); font-size: 10px; fill: var(--faint); }
 
