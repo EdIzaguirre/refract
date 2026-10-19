@@ -3,7 +3,6 @@ import { makeSampleRepo } from "../test/sample.js";
 import { Workspace } from "./workspace.js";
 import { parsePlan } from "./plan.js";
 import { printPlanComparison, productFacts } from "./plan-compare.js";
-import { newDependencies, sharedDependencies } from "../shared/plan-dependencies.js";
 import { sharedSurface, surfaceClasses } from "../shared/plan-surface.js";
 import { singularize } from "./inflect.js";
 
@@ -71,15 +70,11 @@ describe("two plans side by side", () => {
     expect(b.flows[0].calls).toEqual(["OrdersController → Order#receipt_email", "OrdersController → ReceiptEmailJob.perform_later"]);
     expect(a.flows[0].sequence.messages.map((m) => `${m.from}>${m.to}.${m.label}`)).toEqual(["OrdersController>Receipts.send_for", "Receipts>ReceiptEmailJob.perform_later"]);
 
-    // The drawing keeps only what the plan touches and what it points at.
-    expect(a.drawing.classes.map((k) => k.name).sort()).toEqual(["Order", "OrdersController", "ReceiptEmailJob", "Receipts", "Receipt"].sort());
-
-    // Both plans add a receipts table that belongs to orders, so that dependency is drawn once; the rest are each plan's own.
-    const shared = sharedDependencies(c.sides);
-    expect([...shared]).toEqual(["Receipt → Order"]);
-    expect(newDependencies(a, shared).map((e) => `${e.from} → ${e.to}`).sort()).toEqual(["OrdersController → Receipts", "Receipts → Order", "Receipts → ReceiptEmailJob"]);
-    // B's only new dependency is the shared one, so B has nothing of its own to draw.
-    expect(newDependencies(b, shared)).toEqual([]);
+    // Existing code each plan touches: B adds to Order, A leaves it alone; both add a refund screen to OrdersController.
+    const order = c.existing.find((r) => r.name === "Order")!;
+    expect(order.cells).toEqual([null, "+ receipt_email"]);
+    expect(order.where).toBe("some");
+    expect(order.dependents).toBeGreaterThan(0);
 
     // The note quotes Ch 11 and says plans weigh interfaces only.
     const note = c.note.lines.join(" ");
@@ -116,20 +111,17 @@ describe("two plans side by side", () => {
     expect(printPlanComparison(c)).toContain("Receipt (new): persistence only");
   });
 
-  it("counts the callers of what a plan changes, not of what it only extends", async () => {
-    // One plan only adds a method to Order; the other names Order for what it does differently, and takes one away.
+  it("says what each plan does to an existing class in the plan's own words, beside how many depend on it", async () => {
     const adds = "title: Refunds\nclasses:\n  Order:\n    public: [refund(amount)]\n";
     const changes = "title: Totals move\nclasses:\n  Order:\n    note: Totals move elsewhere.\n    public: [-total]\n";
-    const c = await ws.comparePlans([parsePlan(adds, "a.yml"), parsePlan(changes, "b.yml")], "main", "main");
-    const [extends_, behavior] = c.sides;
-    const order = (s: typeof extends_) => s.coupling.hubs.find((h) => h.name === "Order");
-    expect(order(extends_)).toMatchObject({ changes: "extends" });
-    expect(order(behavior)).toMatchObject({ changes: "behavior" });
-    expect(order(behavior)!.dependents).toBeGreaterThan(0);
-    // Only the behavior change reaches Order's callers.
-    expect(extends_.coupling.reach).toBe(0);
-    expect(behavior.coupling.reach).toBe(order(behavior)!.dependents);
-    expect(printPlanComparison(c)).toContain("only extends, callers unaffected: Order (");
+    const noted = "title: Just a note\nclasses:\n  Order:\n    note: Totals move elsewhere.\n";
+    const c = await ws.comparePlans([parsePlan(adds, "a.yml"), parsePlan(changes, "b.yml"), parsePlan(noted, "c.yml")], "main", "main");
+    const order = c.existing.find((r) => r.name === "Order")!;
+    // Adds and removals are listed; with neither, the plan's note is quoted. Nothing is inferred.
+    expect(order.cells).toEqual(["+ refund(amount)", "− total", '"Totals move elsewhere."']);
+    // Measured from today's code, so the same for every plan.
+    expect(order.dependents).toBeGreaterThan(0);
+    expect(printPlanComparison(c)).toContain(`Order (${order.dependents})\n    A: + refund(amount)\n    B: − total\n    C: "Totals move elsewhere."`);
   });
 
   it("reads -name in a class's public list as a method the plan takes away", () => {
@@ -138,11 +130,20 @@ describe("two plans side by side", () => {
     expect(plan.classes[0].remove.map((m) => `${m.scope}:${m.name}`)).toEqual(["instance:total", "class:legacy"]);
   });
 
-  it("calls two plans with the same product a tie on product, and offers combining when each wins once", async () => {
+  it("calls two plans with the same product a tie on product", async () => {
     const same = A.replace("depends_on: [ReceiptEmailJob, Order]", "depends_on: [ReceiptEmailJob, Order, User]");
-    const fewer = A.replace("public: [send_for(order), resend(order)]", "public: [send_for(order)]").replace("depends_on: [ReceiptEmailJob, Order]", "depends_on: [ReceiptEmailJob, Order, User, Checkout]");
-    const c = await ws.comparePlans([parsePlan(same, "a.yml"), parsePlan(fewer, "b.yml")], "main", "main");
+    const c = await ws.comparePlans([parsePlan(A, "a.yml"), parsePlan(same, "b.yml")], "main", "main");
     expect(c.product.every((r) => r.where === "all")).toBe(true);
+  });
+
+  it("offers combining when one plan has the simpler interface and another the leaner request", async () => {
+    // Same product. The second asks callers to learn less (one method), but its controller makes two calls itself.
+    const busy = A.replace("public: [send_for(order), resend(order)]", "public: [send_for(order)]").replace(
+      "    - OrdersController#create\n    - Receipts#send_for\n    - ReceiptEmailJob.perform_later",
+      "    - OrdersController#create:\n        - Receipts#send_for\n        - ReceiptEmailJob.perform_later",
+    );
+    const c = await ws.comparePlans([parsePlan(A, "a.yml"), parsePlan(busy, "b.yml")], "main", "main");
+    expect(c.sides[1].flows[0].entryCalls).toBe(2);
     expect(c.note.lines.join(" ")).toContain("combine features of multiple alternatives");
   });
 

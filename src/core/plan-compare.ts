@@ -1,5 +1,5 @@
 import type { AssociationFacts, ClassChange, Comparison, PlanComparison, PlanSide, ProductChanges, ProductPart, ProductRow, Role, Sequence } from "../shared/types.js";
-import type { Plan, PlanFlow } from "./plan.js";
+import type { Plan, PlanClass, PlanFlow } from "./plan.js";
 import { planInfo } from "./plan-preview.js";
 import { type SurfaceItem, byLayer, methodCount, sharedSurface, surfaceClasses } from "../shared/plan-surface.js";
 
@@ -7,9 +7,9 @@ import { type SurfaceItem, byLayer, methodCount, sharedSurface, surfaceClasses }
  * Two to four plans for the same goal, side by side: Ousterhout's "design it
  * twice" (A Philosophy of Software Design, Ch 11). All are drawn against the
  * same code, then compared on what they add to the product, how much the rest
- * of the code must learn, how many arrows they add, and how the same request
- * runs under each. Plans have no code, so depth is judged from interfaces and
- * dependencies only.
+ * of the code must learn, which existing classes they touch, and how the same
+ * request runs under each. Plans have no code, so depth is judged from
+ * interfaces and request flows only.
  */
 
 /** More than this stops fitting side by side, and stops being a comparison anyone can hold in their head. */
@@ -28,25 +28,52 @@ export function comparePlans(base: { ref: string; short: string }, plans: { plan
   const sides = plans.map((p, i) => side(LABELS[i], p.plan, p.comparison));
   const product = productRows(sides.map((s) => s.product));
   const flows = matchFlows(plans.map((p) => p.plan.flows));
-  return { base, sides, product, flows, note: note(sides, product, flows) };
-}
-
-/**
- * How a plan reshapes an existing class. One that only gains public methods or associations is
- * "extends": its callers keep working. One that loses a public method, or that the plan names without
- * giving it anything new (it is there for what it does differently), is "behavior": its callers may have to change.
- */
-function changeKind(k: ClassChange): "extends" | "behavior" {
-  const before = new Set(k.before?.publicMethods ?? []);
-  const after = new Set(k.after?.publicMethods ?? []);
-  const lost = [...before].some((m) => !after.has(m));
-  const had = new Set((k.before?.associations ?? []).map(associationLine));
-  const gained = [...after].some((m) => !before.has(m)) || (k.after?.associations ?? []).some((a) => !had.has(associationLine(a)));
-  return lost || !gained ? "behavior" : "extends";
+  // Every plan is drawn against the same code, so any one comparison knows who depends on whom today.
+  return { base, sides, product, existing: existingRows(sides, plans[0].comparison), flows, note: note(sides, product, flows) };
 }
 
 /** An association as its Rails line reads: `belongs_to :home_site, class_name: "Site"`. */
 const associationLine = (a: AssociationFacts) => `${a.kind} :${a.name}${a.className ? `, class_name: "${a.className}"` : ""}`;
+
+/**
+ * What a plan says it does to an existing class, from the plan alone: the public methods and associations
+ * it adds (+) and takes away (−); failing those, its note, quoted; failing that, the calls a flow gives it.
+ * Nothing is inferred about whether callers break: the reader judges that.
+ */
+function statedChange(k: ClassChange, planned: PlanClass | undefined, flows: PlanFlow[], sigs: Map<string, string>): string {
+  const before = new Set(k.before?.publicMethods ?? []);
+  const after = new Set(k.after?.publicMethods ?? []);
+  const had = new Set((k.before?.associations ?? []).map(associationLine));
+  const parts = [
+    ...(k.after?.associations ?? []).map(associationLine).filter((a) => !had.has(a)).map((a) => `+ ${a}`),
+    ...[...after].filter((m) => !before.has(m)).map((m) => `+ ${sigs.get(`${short(k.name)}|${m}`) ?? m}`),
+    ...[...before].filter((m) => !after.has(m)).map((m) => `− ${m}`),
+  ];
+  if (parts.length) return parts.join(", ");
+  if (planned?.note) return `"${planned.note}"`;
+  const calls = flows.flatMap((f) => f.calls.filter(({ from }) => sameClass(f.steps[from].cls, k.name)).map(({ to }) => short(f.steps[to].text)));
+  if (calls.length) return `now calls ${[...new Set(calls)].join(", ")}`;
+  return "named in the plan";
+}
+
+const sameClass = (planName: string, name: string) => planName === name || name.endsWith(`::${planName}`) || short(name) === planName;
+
+/** Each existing class any plan touches: how many classes depend on it today, and what each plan says it does to it. */
+function existingRows(sides: PlanSide[], c: Comparison): PlanComparison["existing"] {
+  const dependents = new Map<string, Set<string>>();
+  for (const e of c.edges) {
+    if (!e.before || e.kind === "inherits" || e.from === e.to) continue;
+    dependents.set(e.to, (dependents.get(e.to) ?? new Set()).add(e.from));
+  }
+  const names = [...new Set(sides.flatMap((s) => s.existing.map((x) => x.name)))];
+  return names
+    .map((name) => {
+      const cells = sides.map((s) => s.existing.find((x) => x.name === name)?.change ?? null);
+      const role = sides.flatMap((s) => s.existing).find((x) => x.name === name)!.role;
+      return { name, role, dependents: dependents.get(name)?.size ?? 0, cells, where: cells.every((x) => x === cells[0]) ? ("all" as const) : ("some" as const) };
+    })
+    .sort((x, y) => y.dependents - x.dependents || x.name.localeCompare(y.name));
+}
 
 function side(label: string, plan: Plan, c: Comparison): PlanSide {
   const planned = c.classes.filter((k) => k.planned);
@@ -76,34 +103,15 @@ function side(label: string, plan: Plan, c: Comparison): PlanSide {
   }
   surface.classes.sort((x, y) => y.methods.length - x.methods.length || x.name.localeCompare(y.name));
 
-  const area = new Map(c.classes.map((k) => [k.name, k.area]));
-  const arrows = c.edges.filter((e) => e.planned);
-  // Who depends on each reshaped class today. Classes the plan touches anyway are left out: the risk
-  // is in the callers nobody planned to look at.
-  const inPlan = new Set(planned.map((k) => k.name));
-  const dependents = new Map<string, Set<string>>();
-  for (const e of c.edges) {
-    if (!e.before || e.kind === "inherits" || e.from === e.to || inPlan.has(e.from)) continue;
-    dependents.set(e.to, (dependents.get(e.to) ?? new Set()).add(e.from));
-  }
-  const reshaped = planned.filter((k) => k.status !== "added");
-  const hubs = reshaped
-    .map((k) => ({ name: k.name, role: k.role, dependents: dependents.get(k.name)?.size ?? 0, changes: changeKind(k) }))
-    .filter((h) => h.dependents > 0)
-    .sort((x, y) => y.dependents - x.dependents || x.name.localeCompare(y.name));
-  const behaving = new Set(hubs.filter((h) => h.changes === "behavior").map((h) => h.name));
-  const coupling = {
-    reach: new Set([...behaving].flatMap((n) => [...(dependents.get(n) ?? [])])).size,
-    hubs,
-    touched: planned.length,
-    created: planned.filter((k) => k.status === "added").length,
-    reshaped: planned.filter((k) => k.status !== "added").length,
-    arrows: arrows.length,
-    crossArea: arrows.filter((e) => area.get(e.from) !== area.get(e.to)).length,
-  };
+  // The existing classes the plan reshapes, each with what the plan says it does to them, in its own words.
+  const planClass = new Map(plan.classes.map((k) => [k.name, k]));
+  const findPlanned = (name: string) => planClass.get(name) ?? [...planClass.values()].find((k) => name.endsWith(`::${k.name}`) || k.name === short(name));
+  const existing = planned
+    .filter((k) => k.status !== "added")
+    .map((k) => ({ name: k.name, role: k.role, change: statedChange(k, findPlanned(k.name), plan.flows, sigs) }));
 
   // Only what the plan touches and what it points at, so the page stays small.
-  const keep = new Set([...planned.map((k) => k.name), ...arrows.flatMap((e) => [e.from, e.to])]);
+  const keep = new Set(planned.map((k) => k.name));
   const drawing: Comparison = {
     ...c,
     classes: c.classes.filter((k) => keep.has(k.name)),
@@ -123,7 +131,7 @@ function side(label: string, plan: Plan, c: Comparison): PlanSide {
     entryCalls: f.calls.filter((x) => x.from === 0).length,
   }));
 
-  return { label, plan: planInfo(plan, "preview"), product: c.product!, drawing, surface, coupling, flows };
+  return { label, plan: planInfo(plan, "preview"), product: c.product!, drawing, surface, existing, flows };
 }
 
 /** A planned call tree as a sequence diagram, in the order the plan lists the calls. */
@@ -278,12 +286,6 @@ export function note(sides: PlanSide[], rows: ProductRow[], flows: PlanCompariso
     winners.add(simple.label);
     first += ` Plan ${simple.label} asks the rest of the code to learn ${methods(simple.surface)}; ${two ? `Plan ${wide.label}` : `the widest, Plan ${wide.label},`} asks for ${methods(wide.surface)}.`;
   }
-  const [less, more] = ends(sides, (s) => s.coupling.arrows);
-  if (less.coupling.arrows !== more.coupling.arrows) {
-    first += ` ${less.label === simple.label && winners.size ? `${less.label} also` : `Plan ${less.label}`} adds the fewest new dependencies between classes (${less.coupling.arrows}, against ${more.coupling.arrows} for ${more.label}), so fewer classes have to change together.`;
-    winners.add(less.label);
-  }
-  if (two) first = first.replace("the fewest new dependencies", "fewer new dependencies");
   lines.push(first);
 
   // The book's first test: what the caller has to do. A controller driving many steps does work the module could.
@@ -306,7 +308,7 @@ export function note(sides: PlanSide[], rows: ProductRow[], flows: PlanCompariso
   if (apart) lines.push(`They also differ in the product (${plural(apart, "fact")} above), so settle what to build before weighing how.`);
   else if (winners.size > 1)
     lines.push(`Different plans win on different counts. The chapter allows for that: you may "combine features of multiple alternatives into a new design that is better than any of the original choices."`);
-  lines.push("Plans have no code yet, so this weighs interfaces and dependencies only, not how much each class hides behind them.");
+  lines.push("Plans have no code yet, so this weighs interfaces and request flows only, not how much each class hides behind them.");
   return { lines, source: `Ch 11 "Design it Twice"` };
 }
 
@@ -351,16 +353,18 @@ export function printPlanComparison(c: PlanComparison): string {
     if (shared.length && !own.length) out.push("    none");
     list(own);
   }
-  out.push("", "How far each plan's changes reach");
-  for (const s of c.sides) {
-    const k = s.coupling;
-    const changed = k.hubs.filter((h) => h.changes === "behavior");
-    const extended = k.hubs.filter((h) => h.changes === "extends");
-    const hubList = (hs: typeof k.hubs) => hs.map((h) => `${h.name} (${h.dependents})`).join(", ");
-    out.push(`  ${s.label}: ${plural(k.reach, "class", "classes")} outside the plan depend on what it changes${changed.length ? `: ${hubList(changed)}` : ""}`);
-    if (extended.length) out.push(`     only extends, callers unaffected: ${hubList(extended)}`);
-    out.push(`     touches ${plural(k.touched, "class", "classes")} (${k.created} new, ${k.reshaped} reshaped), adds ${plural(k.arrows, "new dependency", "new dependencies")}, ${k.crossArea} between business areas`);
+  out.push("", "Existing code each plan touches (how many classes depend on it today)");
+  const apartRows = c.existing.filter((r) => r.where === "some");
+  const sameRows = c.existing.filter((r) => r.where === "all");
+  for (const r of apartRows) {
+    out.push(`  ${r.name} (${r.dependents})`);
+    r.cells.forEach((t, i) => out.push(`    ${c.sides[i].label}: ${t ?? "untouched"}`));
   }
+  if (sameRows.length) {
+    out.push(`  The same in ${n === 2 ? "both" : "all"}`);
+    for (const r of sameRows) out.push(`    ${r.name} (${r.dependents}): ${r.cells[0]}`);
+  }
+  if (!c.existing.length) out.push("  none");
   if (c.flows.length) {
     out.push("", "The same request under each plan");
     for (const p of c.flows) {

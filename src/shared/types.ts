@@ -539,21 +539,8 @@ export interface PlanSide {
    */
   surface: { classes: { name: string; role: Role; isNew: boolean; methods: string[]; associations: string[]; params: number }[]; methods: number; params: number };
   /** How tangled: classes the plan touches and the arrows it adds between classes and between business areas. */
-  /**
-   * How far the plan's changes reach. `hubs` are the existing classes it reshapes that others depend on,
-   * each with how many classes outside the plan depend on it today (inheritance aside), most first, and
-   * whether the plan only extends it or changes how it behaves. `reach` counts the distinct classes
-   * outside the plan that depend on a class whose behavior changes. The arrow counts come after.
-   */
-  coupling: {
-    touched: number;
-    created: number;
-    reshaped: number;
-    arrows: number;
-    crossArea: number;
-    reach: number;
-    hubs: { name: string; role: Role; dependents: number; changes: "extends" | "behavior" }[];
-  };
+  /** The existing classes the plan reshapes, with what the plan says it does to each, in its own words. */
+  existing: { name: string; role: Role; change: string }[];
   /** Planned requests: the calls as "Caller → Callee#method", and how many calls the entry point makes itself. */
   flows: { name: string; sequence: Sequence; calls: string[]; steps: number; entryCalls: number }[];
 }
@@ -573,6 +560,11 @@ export interface PlanComparison {
   base: { ref: string; short: string };
   sides: PlanSide[];
   product: ProductRow[];
+  /**
+   * Each existing class any plan touches, most depended on first: how many classes depend on it today
+   * (measured from the code, inheritance aside) and, per plan, what it says it does to it (null: untouched).
+   */
+  existing: { name: string; role: Role; dependents: number; cells: (string | null)[]; where: "all" | "some" }[];
   /** The same request under each plan: per side, an index into its flows, or null where it does not draw it. */
   flows: { title: string; at: (number | null)[] }[];
   /** A short note from the Ousterhout lens, argued from Ch 11 "Design it Twice". */

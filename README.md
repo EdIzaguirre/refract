@@ -114,9 +114,9 @@ Ousterhout's Ch 11 asks for "multiple options for each major design decision". `
 
 - **What each plan adds to the product**: the tables, states, screens, rules and jobs where they part ways (with each plan's tables drawn), then what they share.
 - **What the rest of the code must learn**: the public methods each plan adds outside controllers, policies, jobs and mailers, with their parameters.
-- **How tangled each plan is**: the new dependencies it adds between classes and between business areas, drawn in Rails layers. Only new dependencies are drawn: those every plan adds once, then each plan's own. A toggle adds the dependencies that are there today.
+- **Existing code each plan touches**: one row per existing class a plan reshapes, most depended on first. How many classes depend on it is measured from today's code; each plan's cell is what that plan says it does to the class, in its own words (`+` added, `−` taken away, or its note). Nothing is inferred about whether callers break.
 - **The same request under each plan**: flows paired by name (or by the action they start from), as sequence diagrams, with how many calls the entry point makes itself.
-- **One short Ousterhout note**, argued from Ch 11's own questions ("Does one alternative have a simpler interface than another?", "ease of use for higher level software"). Plans have no code, so it weighs interfaces and dependencies only.
+- **One short Ousterhout note**, argued from Ch 11's own questions ("Does one alternative have a simpler interface than another?", "ease of use for higher level software"). Plans have no code, so it weighs interfaces and request flows only.
 
 Edit any of the files and the page follows. `refract plan compare <a> <b> [c] [d]` prints the same in the terminal. In Claude Code, `/refract plan --two <name>` (or `--three`, `--four`) drafts genuinely different plans (`<name>-a`, `<name>-b`, ...), opens them side by side, and once you pick one, saves it as `<name>` so the branch's Plan check uses it. Four is the limit: past that the columns stop fitting and the comparison stops being one you can hold in your head.
 

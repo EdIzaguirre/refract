@@ -21,17 +21,19 @@ function dims(shape: Shape | null): { w: number; h: number } | null {
 const LABEL_TOP = 30;
 const LABEL_BOTTOM = 22;
 const PAD = 24;
-/** Room above the drawing for the layer headings. */
+/** Room above the first band for its heading. */
 const HEAD = 26;
 
 /**
- * Rails layers, left to right: what handles a request, what does the work,
- * what holds the data. Where a box sits says what kind of class it is.
+ * Rails layers, top to bottom: what handles a request, what does the work,
+ * what holds the data. Each is a band, so where a box sits says what kind of
+ * class it is, and an arrow pointing up (a model reaching into a service) stands out.
+ * A concern sits with services: it is mixed into a class, not a table.
  */
 const LAYERS: { title: string; roles: Role[] }[] = [
   { title: "Controllers", roles: ["controller", "component", "helper"] },
-  { title: "Services and jobs", roles: ["service", "job", "mailer", "policy", "lib", "other"] },
-  { title: "Models", roles: ["model", "concern"] },
+  { title: "Services and jobs", roles: ["service", "job", "mailer", "policy", "lib", "concern", "other"] },
+  { title: "Models", roles: ["model"] },
 ];
 const layerOf = (r: Role) => Math.max(0, LAYERS.findIndex((l) => l.roles.includes(r)));
 
@@ -67,8 +69,8 @@ interface Drawing {
   height: number;
   nodes: Placed[];
   edges: Routed[];
-  /** Headings over each Rails layer the drawing uses, centred on its column. */
-  layers: { title: string; x: number }[];
+  /** A band for each Rails layer the drawing uses, from its top to its bottom. */
+  layers: { title: string; y0: number; y1: number }[];
 }
 
 const elk = new ELK();
@@ -92,15 +94,16 @@ async function layout(c: Comparison, names: string[]): Promise<Drawing> {
     id: "stop",
     layoutOptions: {
       "elk.algorithm": "layered",
-      // Left to right: a hub and the classes that call it stack in columns, which fits a half-width pane.
-      "elk.direction": "RIGHT",
-      "elk.spacing.nodeNode": "22",
-      "elk.layered.spacing.nodeNodeBetweenLayers": "70",
+      // Top to bottom, a band per Rails layer: requests come in at the top and data sits at the bottom.
+      "elk.direction": "DOWN",
+      "elk.spacing.nodeNode": "28",
+      "elk.layered.spacing.nodeNodeBetweenLayers": "56",
       "elk.edgeRouting": "SPLINES",
       "elk.layered.considerModelOrder.strategy": "NODES_AND_EDGES",
-      "elk.aspectRatio": "0.8",
-      // Columns by Rails layer, so a backwards arrow (a model reaching into a service) stands out.
+      "elk.aspectRatio": "2.4",
       "elk.partitioning.activate": "true",
+      // One layout for every cluster of classes, so the bands line up across all of them.
+      "elk.separateConnectedComponents": "false",
     },
     children: classes.map((k) => ({
       id: k.name,
@@ -125,9 +128,7 @@ async function layout(c: Comparison, names: string[]): Promise<Drawing> {
   const layers = LAYERS.flatMap((l, i) => {
     const inLayer = nodes.filter((n) => layerOf(n.change.role) === i);
     if (!inLayer.length) return [];
-    const x0 = Math.min(...inLayer.map((n) => n.x));
-    const x1 = Math.max(...inLayer.map((n) => n.x + n.w));
-    return [{ title: l.title, x: (x0 + x1) / 2 }];
+    return [{ title: l.title, y0: Math.min(...inLayer.map((n) => n.y)) - HEAD, y1: Math.max(...inLayer.map((n) => n.y + n.h)) + 6 }];
   });
   return { width: (graph.width ?? 0) + PAD * 2, height: (graph.height ?? 0) + PAD * 2 + HEAD, nodes, edges: routed, layers };
 }
@@ -187,9 +188,12 @@ function Pane({ drawing, side, onOpen }: { drawing: Drawing; side: "before" | "a
         ))}
       </defs>
       {drawing.layers.map((l) => (
-        <text key={l.title} className="fig-layer" x={l.x} y={16} textAnchor="middle">
-          {l.title}
-        </text>
+        <g key={l.title}>
+          <rect className="fig-band" x={4} y={l.y0} width={drawing.width - 8} height={l.y1 - l.y0} rx={8} />
+          <text className="fig-layer" x={14} y={l.y0 + 16}>
+            {l.title}
+          </text>
+        </g>
       ))}
       {drawing.edges.map((r, i) => {
         const present = side === "before" ? r.edge.before > 0 : r.edge.after > 0;

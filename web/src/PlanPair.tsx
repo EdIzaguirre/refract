@@ -1,11 +1,10 @@
 import type React from "react";
-import { useMemo, useState } from "react";
-import type { Comparison, PlanComparison, PlanSide, ProductPart, ProductRow } from "../../src/shared/types";
-import { dependencyKey, newDependencies, sharedDependencies } from "../../src/shared/plan-dependencies";
+import { useMemo } from "react";
+import type { PlanComparison, PlanSide, ProductPart, ProductRow } from "../../src/shared/types";
 import { type SurfaceItem, byLayer, methodCount, sharedSurface, surfaceClasses } from "../../src/shared/plan-surface";
 import { Logo } from "./VerdictStrip";
 import { TablesDiagram } from "./tour/Product";
-import { ROLE_WORD, StopDiagram } from "./tour/StopDiagram";
+import { ROLE_WORD } from "./tour/StopDiagram";
 import { Mermaid } from "./Mermaid";
 import { toMermaid } from "./ClassPanel";
 
@@ -28,8 +27,6 @@ export function PlanPair({ pair }: { pair: PlanComparison }) {
   const anyTables = pair.sides.some((s) => s.product.tables.length > 0);
   const cols = { "--n": n } as React.CSSProperties;
   const problems = pair.sides.filter((s) => s.plan.problems.length);
-  const [today, setToday] = useState(false);
-  const shared = useMemo(() => sharedDependencies(pair.sides), [pair]);
   const sameSurface = useMemo(() => sharedSurface(pair.sides), [pair]);
   const sameClasses = useMemo(() => surfaceClasses(pair.sides[0], (k) => sameSurface.has(k)), [pair, sameSurface]);
   return (
@@ -124,35 +121,11 @@ export function PlanPair({ pair }: { pair: PlanComparison }) {
             </section>
 
             <section className="product-part">
-              <h3>How far each plan's changes reach</h3>
+              <h3>Existing code each plan touches</h3>
               <p className="product-note">
-                A new dependency is not a risk in itself. Changing a class many others lean on is: each of them may have to change too. So each plan leads with the existing classes whose behavior it changes (it takes a method away, or names the class without giving it anything new) and how many classes outside the plan depend on them today. A class it only adds methods or associations to is listed apart: its callers keep working.
+                Each existing class a plan reshapes, most depended on first. <b>Depended on by</b> is measured from today&apos;s code: the classes that name it, inheritance aside. Each plan&apos;s cell is what that plan says it does to the class, in its own words: what it adds (+), what it takes away (−), or its note. Whether callers have to change is yours to judge.
               </p>
-              <div className="pair-cols" style={cols}>
-                {pair.sides.map((s) => (
-                  <Tangle key={s.label} side={s} />
-                ))}
-              </div>
-              <label className="pair-toggle">
-                <input type="checkbox" checked={today} onChange={(e) => setToday(e.target.checked)} /> Also draw the dependencies that are there today
-              </label>
-              <div className="pair-drawings">
-                {today ? (
-                  pair.sides.map((s) => <Drawing key={s.label} side={s} />)
-                ) : (
-                  <>
-                    {shared.size > 0 && <NewDrawing side={pair.sides[0]} keep={(k) => shared.has(k)} tag={`The same in ${every} plans`} />}
-                    {pair.sides.map((s) => (
-                      <NewDrawing key={s.label} side={s} keep={(k) => !shared.has(k)} tag={shared.size ? `Plan ${s.label} only` : `Plan ${s.label}`} />
-                    ))}
-                  </>
-                )}
-              </div>
-              <p className="product-note">
-                {today
-                  ? "Dashed boxes are planned; classes with no arrows are left out. Green arrows are new dependencies the plan adds; grey ones are there today. Boxes sit in Rails layers: controllers, then services and jobs, then models."
-                  : `Only the new dependencies are drawn${shared.size ? `: those ${every} plans add once, then each plan's own` : ""}. Dashed boxes are planned. Boxes sit in Rails layers: controllers, then services and jobs, then models.`}
-              </p>
+              <Existing rows={pair.existing} labels={pair.sides.map((s) => s.label)} every={every} />
             </section>
 
             {pair.flows.length > 0 && (
@@ -295,71 +268,51 @@ function SurfaceLayers({ classes }: { classes: SurfaceItem[] }) {
   );
 }
 
-/** How many unplanned classes lean on what the plan changes, the biggest first; what it only extends, and the arrow counts, beneath. */
-function Tangle({ side: s }: { side: PlanSide }) {
-  const k = s.coupling;
-  const SHOWN = 4;
-  const changed = k.hubs.filter((h) => h.changes === "behavior");
-  const extended = k.hubs.filter((h) => h.changes === "extends");
+/** One row per existing class with a cell per plan; rows every plan writes alike fold into one list beneath. */
+function Existing({ rows, labels, every }: { rows: PlanComparison["existing"]; labels: string[]; every: string }) {
+  if (!rows.length) return <p className="pair-none">No plan reshapes an existing class.</p>;
+  const apart = rows.filter((r) => r.where === "some");
+  const same = rows.filter((r) => r.where === "all");
   return (
-    <div className="pair-cell">
-      <div className="pane-tag">Plan {s.label}</div>
-      <div className="pair-big">
-        {plural(k.reach, "class", "classes")}
-        <span>outside the plan depend on what it changes</span>
-      </div>
-      {changed.length > 0 ? (
-        <ul className="pair-hubs">
-          {changed.slice(0, SHOWN).map((h) => (
-            <li key={h.name}>
-              <b>{h.name}</b> <span className="pair-small">{plural(h.dependents, "class", "classes")} depend on it</span>
-            </li>
+    <>
+      {apart.length > 0 && (
+        <div className="pair-rows existing" role="table" aria-label="Existing classes each plan touches" style={{ "--n": labels.length } as React.CSSProperties}>
+          <div className="pair-row head" role="row">
+            <span role="columnheader">Class · depended on by</span>
+            {labels.map((l) => (
+              <span key={l} role="columnheader">
+                Plan {l}
+              </span>
+            ))}
+          </div>
+          {apart.map((r) => (
+            <div key={r.name} className="pair-row" role="row">
+              <span className="part" role="cell">
+                <code>{r.name}</code> <b>{r.dependents}</b>
+              </span>
+              {r.cells.map((t, k) => (
+                <span key={k} role="cell" className={t ? "" : "absent"}>
+                  {t ?? "untouched"}
+                </span>
+              ))}
+            </div>
           ))}
-          {changed.length > SHOWN && <li className="pair-small">and {plural(changed.length - SHOWN, "more changed class", "more changed classes")}</li>}
-        </ul>
-      ) : (
-        <p className="pair-none">It changes nothing other classes depend on.</p>
+        </div>
       )}
-      {extended.length > 0 && (
-        <p className="pair-small">
-          Only extends, so callers keep working: {extended.map((h) => `${h.name} (${plural(h.dependents, "dependent")})`).join(", ")}
-        </p>
+      {same.length > 0 && (
+        <details className="product-more" open={apart.length === 0}>
+          <summary>
+            The same in {every} ({same.length})
+          </summary>
+          <ul>
+            {same.map((r) => (
+              <li key={r.name}>
+                <code>{r.name}</code> <b>{r.dependents}</b>: {r.cells[0]}
+              </li>
+            ))}
+          </ul>
+        </details>
       )}
-      <p className="pair-small">
-        {plural(k.arrows, "new dependency", "new dependencies")}, {k.crossArea} between business areas · touches {plural(k.touched, "class", "classes")} ({k.created} new, {k.reshaped} reshaped)
-      </p>
-    </div>
-  );
-}
-
-/** The plan's classes and the classes they point at, full width so the boxes stay readable. */
-function Drawing({ side: s }: { side: PlanSide }) {
-  // Classes with no arrows (a policy gaining a rule, a new settings screen) are product facts above; leaving them out keeps the layers in order.
-  const linked = new Set(s.drawing.edges.filter((e) => e.after > 0 && e.from !== e.to).flatMap((e) => [e.from, e.to]));
-  const classes = s.drawing.classes.map((c) => c.name).filter((n) => linked.has(n));
-  if (!classes.length) return null;
-  return (
-    <div className="pair-cell">
-      <StopDiagram comparison={s.drawing} classes={classes} onOpen={() => {}} only={{ side: "after", tag: `Plan ${s.label}` }} />
-    </div>
-  );
-}
-
-/** Only the new dependencies `keep` picks, and the classes at their ends. */
-function NewDrawing({ side: s, keep, tag }: { side: PlanSide; keep(key: string): boolean; tag: string }) {
-  const drawing = useMemo((): Comparison => ({ ...s.drawing, edges: newDependencies(s).filter((e) => keep(dependencyKey(e))) }), [s, tag]);
-  const linked = new Set(drawing.edges.flatMap((e) => [e.from, e.to]));
-  const classes = drawing.classes.map((c) => c.name).filter((n) => linked.has(n));
-  return (
-    <div className="pair-cell">
-      {classes.length ? (
-        <StopDiagram comparison={drawing} classes={classes} onOpen={() => {}} only={{ side: "after", tag }} />
-      ) : (
-        <>
-          <div className="pane-tag">{tag}</div>
-          <p className="pair-none">No new dependencies of its own.</p>
-        </>
-      )}
-    </div>
+    </>
   );
 }

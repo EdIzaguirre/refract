@@ -380,6 +380,7 @@ a { color: var(--accent); }
 .method-code-path { font-family: var(--font-mono); font-size: 0.72rem; color: var(--muted); }
 .method-code .diff { max-height: 420px; overflow: auto; }
 .fig-layer { font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; fill: var(--faint); }
+.fig-band { fill: var(--paper); stroke: var(--rule); stroke-width: 1; }
 .books-link { margin-top: -8px; padding-top: 10px; border-top: 1px solid var(--rule); }
 .books-link .stop-num svg { display: block; }
 .books { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 14px; }
@@ -576,6 +577,9 @@ a { color: var(--accent); }
 .pair-problems { margin: 0; color: var(--ask); font-size: 0.88rem; }
 .pair-rows { display: grid; border: 1px solid var(--rule); border-radius: 10px; overflow: hidden; background: var(--surface); }
 .pair-row { display: grid; grid-template-columns: 110px repeat(var(--n, 2), minmax(0, 1fr)); gap: 0; border-top: 1px solid var(--rule); }
+.pair-rows.existing .pair-row { grid-template-columns: minmax(180px, 1.3fr) repeat(var(--n, 2), minmax(0, 1fr)); }
+.pair-rows.existing .part code { overflow-wrap: anywhere; font-size: 0.82rem; }
+.pair-rows.existing .part b { display: block; font-variant-numeric: tabular-nums; }
 .pair-row:first-child { border-top: 0; }
 .pair-row > span { padding: 8px 12px; font-size: 0.9rem; line-height: 1.45; }
 .pair-row > span + span { border-left: 1px solid var(--rule); }
