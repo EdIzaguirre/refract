@@ -1,7 +1,12 @@
 // Just enough inflection to turn Rails association names into class names
 // and class names into readable words.
 
+/** Rails' irregulars that show up in table names; snake_case words end in the plural ("care_people"). */
+const IRREGULAR: Record<string, string> = { people: "person", men: "man", women: "woman", children: "child" };
+
 export function singularize(word: string): string {
+  const irregular = Object.keys(IRREGULAR).find((p) => word === p || word.endsWith(`_${p}`));
+  if (irregular) return word.slice(0, -irregular.length) + IRREGULAR[irregular];
   if (/ies$/.test(word)) return word.replace(/ies$/, "y");
   if (/(ss|us|is)$/.test(word)) return word;
   if (/(x|ch|sh|ss)es$/.test(word)) return word.replace(/es$/, "");

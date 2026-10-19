@@ -4,7 +4,7 @@ import type { Comparison, PlanComparison, PlanSide, ProductPart, ProductRow } fr
 import { dependencyKey, newDependencies, sharedDependencies } from "../../src/shared/plan-dependencies";
 import { Logo } from "./VerdictStrip";
 import { TablesDiagram } from "./tour/Product";
-import { ROLE_WORD, StopDiagram, shortName } from "./tour/StopDiagram";
+import { ROLE_WORD, StopDiagram } from "./tour/StopDiagram";
 import { Mermaid } from "./Mermaid";
 import { toMermaid } from "./ClassPanel";
 
@@ -228,16 +228,31 @@ function Surface({ side: s, max }: { side: PlanSide; max: number }) {
         <i style={{ width: `${(100 * s.surface.methods) / max}%` }} />
       </div>
       {s.surface.classes.length === 0 && <p className="pair-none">No new public methods outside controllers and policies.</p>}
+      <SurfaceGroup title="New classes" classes={s.surface.classes.filter((k) => k.isNew)} />
+      <SurfaceGroup title="Added to existing classes" classes={s.surface.classes.filter((k) => !k.isNew)} />
+    </div>
+  );
+}
+
+/** One kind of class: a brand-new one is all new interface; an existing one gains the methods marked +. */
+function SurfaceGroup({ title, classes }: { title: string; classes: PlanSide["surface"]["classes"] }) {
+  if (!classes.length) return null;
+  const isNew = classes[0].isNew;
+  return (
+    <div className={`pair-group ${isNew ? "new" : "existing"}`}>
+      <h4>{title}</h4>
       <ul className="pair-classes">
-        {s.surface.classes.map((k) => (
+        {classes.map((k) => (
           <li key={k.name}>
-            <b>{shortName(k.name)}</b>
-            <span className="pair-small">
-              {k.isNew ? "new" : "existing"} {ROLE_WORD[k.role]}
-            </span>
+            <div className="pair-class-name">
+              <b>{k.name}</b>
+              <span className="pair-small">
+                {isNew ? "new" : "existing"} {ROLE_WORD[k.role]}
+              </span>
+            </div>
             <div className="pair-sigs">
               {k.methods.map((m) => (
-                <code key={m}>{m}</code>
+                <code key={m}>{isNew ? m : `+ ${m}`}</code>
               ))}
             </div>
           </li>

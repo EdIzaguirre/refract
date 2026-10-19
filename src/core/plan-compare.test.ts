@@ -145,5 +145,6 @@ classes:
 
   it("singularizes table names as Rails does", () => {
     expect(["expenses", "statuses", "addresses", "fees", "boxes", "categories"].map(singularize)).toEqual(["expense", "status", "address", "fee", "box", "category"]);
+    expect(["people", "care_people", "children"].map(singularize)).toEqual(["person", "care_person", "child"]);
   });
 });
