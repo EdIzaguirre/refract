@@ -118,7 +118,7 @@ export function PlanPair({ pair }: { pair: PlanComparison }) {
                   <Drawing key={s.label} side={s} />
                 ))}
               </div>
-              <p className="product-note">Dashed boxes are planned; classes with no arrows are left out. Green arrows are dependencies the plan adds; grey ones are there today. Boxes sit in Rails layers: controllers, then services and jobs, then models.</p>
+              <p className="product-note">Dashed boxes are planned; classes with no arrows are left out. Green arrows are new dependencies the plan adds; grey ones are there today. Boxes sit in Rails layers: controllers, then services and jobs, then models.</p>
             </section>
 
             {pair.flows.length > 0 && (
@@ -234,7 +234,7 @@ function Tangle({ side: s }: { side: PlanSide }) {
     <div className="pair-cell">
       <div className="pane-tag">Plan {s.label}</div>
       <div className="pair-big">
-        {plural(k.arrows, "new arrow")}
+        {plural(k.arrows, "new dependency", "new dependencies")}
         <span>
           {k.crossArea} between business areas · touches {plural(k.touched, "class", "classes")} ({k.created} new, {k.reshaped} reshaped)
         </span>
