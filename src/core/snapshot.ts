@@ -3,7 +3,7 @@ import path from "node:path";
 import type { ClassFacts, ClassUnit, Dependency, FileFacts, MethodFacts, Role, Snapshot } from "../shared/types.js";
 import type { Git } from "./git.js";
 import type { Reader } from "./reader.js";
-import { camelize, singularize } from "./inflect.js";
+import { camelize, singularize, underscore } from "./inflect.js";
 
 /**
  * Builds and caches one Snapshot per commit. Facts are cached per blob, so a
@@ -101,10 +101,11 @@ export function assemble(commit: string, facts: FileFacts[], allFiles: string[])
     if (isNamespaceOnly(name) && defs.every((d) => d.facts.includes.length === 0 && d.facts.extends.length === 0)) continue;
     const methods: MethodFacts[] = defs.flatMap((d) => d.facts.methods);
     const first = defs[0];
+    const home = homeOf(name, defs);
     classes[name] = {
       name,
       kind: first.facts.kind,
-      role: roleOf(first.path, first.facts),
+      role: roleOf(home.path, home.facts),
       superclass: defs.find((d) => d.facts.superclass)?.facts.superclass ?? null,
       locations: defs.map((d) => ({ path: d.path, line: d.facts.line, endLine: d.facts.endLine })),
       codeLines: defs.reduce((s, d) => s + d.facts.codeLines, 0),
@@ -193,6 +194,16 @@ export function assemble(commit: string, facts: FileFacts[], allFiles: string[])
     };
   }
   return { commit, files, classes, allFiles };
+}
+
+/**
+ * The definition a class's role comes from. A module like `Kvc` is opened in every file that nests a
+ * class in it, `app/jobs/kvc/some_job.rb` included, so the first file read says little. The file named
+ * after the constant (`kvc.rb`, `kvc/client.rb`) is its home; failing that, the opening with the most code of its own.
+ */
+function homeOf<T extends { path: string; facts: ClassFacts }>(name: string, defs: T[]): T {
+  const file = `/${underscore(name)}.rb`;
+  return defs.find((d) => `/${d.path}`.endsWith(file)) ?? defs.reduce((best, d) => (d.facts.codeLines > best.facts.codeLines ? d : best));
 }
 
 function roleOf(file: string, c: ClassFacts): Role {
