@@ -116,6 +116,28 @@ describe("two plans side by side", () => {
     expect(printPlanComparison(c)).toContain("Receipt (new): persistence only");
   });
 
+  it("counts the callers of what a plan changes, not of what it only extends", async () => {
+    // One plan only adds a method to Order; the other names Order for what it does differently, and takes one away.
+    const adds = "title: Refunds\nclasses:\n  Order:\n    public: [refund(amount)]\n";
+    const changes = "title: Totals move\nclasses:\n  Order:\n    note: Totals move elsewhere.\n    public: [-total]\n";
+    const c = await ws.comparePlans([parsePlan(adds, "a.yml"), parsePlan(changes, "b.yml")], "main", "main");
+    const [extends_, behavior] = c.sides;
+    const order = (s: typeof extends_) => s.coupling.hubs.find((h) => h.name === "Order");
+    expect(order(extends_)).toMatchObject({ changes: "extends" });
+    expect(order(behavior)).toMatchObject({ changes: "behavior" });
+    expect(order(behavior)!.dependents).toBeGreaterThan(0);
+    // Only the behavior change reaches Order's callers.
+    expect(extends_.coupling.reach).toBe(0);
+    expect(behavior.coupling.reach).toBe(order(behavior)!.dependents);
+    expect(printPlanComparison(c)).toContain("only extends, callers unaffected: Order (");
+  });
+
+  it("reads -name in a class's public list as a method the plan takes away", () => {
+    const plan = parsePlan("classes:\n  Order:\n    public: [refund(amount), -total, -self.legacy]\n", "x.yml");
+    expect(plan.classes[0].public.map((m) => m.signature)).toEqual(["refund(amount)"]);
+    expect(plan.classes[0].remove.map((m) => `${m.scope}:${m.name}`)).toEqual(["instance:total", "class:legacy"]);
+  });
+
   it("calls two plans with the same product a tie on product, and offers combining when each wins once", async () => {
     const same = A.replace("depends_on: [ReceiptEmailJob, Order]", "depends_on: [ReceiptEmailJob, Order, User]");
     const fewer = A.replace("public: [send_for(order), resend(order)]", "public: [send_for(order)]").replace("depends_on: [ReceiptEmailJob, Order]", "depends_on: [ReceiptEmailJob, Order, User, Checkout]");

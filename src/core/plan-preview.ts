@@ -154,9 +154,9 @@ export function overlayPlan(plan: Plan, before: Snapshot): PlanOverlay {
     if (!u.publicMethods.includes(label)) u.publicMethods.push(label);
     return facts;
   };
-  const removeMethod = (u: ClassUnit, name: string) => {
-    u.methods = u.methods.filter((x) => !(x.name === name && x.scope === "instance"));
-    u.publicMethods = u.publicMethods.filter((x) => x !== name);
+  const removeMethod = (u: ClassUnit, name: string, scope: "instance" | "class" = "instance") => {
+    u.methods = u.methods.filter((x) => !(x.name === name && x.scope === scope));
+    u.publicMethods = u.publicMethods.filter((x) => x !== (scope === "class" ? `self.${name}` : name));
   };
   const depend = (u: ClassUnit, to: string, kind: "association" | "reference" | "call") => {
     const target = findClass(Object.keys(classes), to);
@@ -178,7 +178,11 @@ export function overlayPlan(plan: Plan, before: Snapshot): PlanOverlay {
 
   // 2. Their public methods: classes' signatures, controller actions, policy rules, mailer emails.
   const sig = (u: ClassUnit, m: PlanMethod) => addMethod(u, m);
-  for (const k of plan.classes) for (const m of k.public) sig(edit(k.name, null), m);
+  for (const k of plan.classes) {
+    const u = edit(k.name, null);
+    for (const m of k.public) sig(u, m);
+    for (const m of k.remove) removeMethod(u, m.name, m.scope);
+  }
   for (const s of plan.screens) {
     const u = edit(s.controller, "controller");
     for (const a of s.actions) a.op === "-" ? removeMethod(u, a.name) : addMethod(u, { name: a.name, scope: "instance" });

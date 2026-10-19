@@ -1,4 +1,4 @@
-import type { AssociationFacts, Comparison, PlanComparison, PlanSide, ProductChanges, ProductPart, ProductRow, Role, Sequence } from "../shared/types.js";
+import type { AssociationFacts, ClassChange, Comparison, PlanComparison, PlanSide, ProductChanges, ProductPart, ProductRow, Role, Sequence } from "../shared/types.js";
 import type { Plan, PlanFlow } from "./plan.js";
 import { planInfo } from "./plan-preview.js";
 import { type SurfaceItem, byLayer, methodCount, sharedSurface, surfaceClasses } from "../shared/plan-surface.js";
@@ -29,6 +29,20 @@ export function comparePlans(base: { ref: string; short: string }, plans: { plan
   const product = productRows(sides.map((s) => s.product));
   const flows = matchFlows(plans.map((p) => p.plan.flows));
   return { base, sides, product, flows, note: note(sides, product, flows) };
+}
+
+/**
+ * How a plan reshapes an existing class. One that only gains public methods or associations is
+ * "extends": its callers keep working. One that loses a public method, or that the plan names without
+ * giving it anything new (it is there for what it does differently), is "behavior": its callers may have to change.
+ */
+function changeKind(k: ClassChange): "extends" | "behavior" {
+  const before = new Set(k.before?.publicMethods ?? []);
+  const after = new Set(k.after?.publicMethods ?? []);
+  const lost = [...before].some((m) => !after.has(m));
+  const had = new Set((k.before?.associations ?? []).map(associationLine));
+  const gained = [...after].some((m) => !before.has(m)) || (k.after?.associations ?? []).some((a) => !had.has(associationLine(a)));
+  return lost || !gained ? "behavior" : "extends";
 }
 
 /** An association as its Rails line reads: `belongs_to :home_site, class_name: "Site"`. */
@@ -64,7 +78,23 @@ function side(label: string, plan: Plan, c: Comparison): PlanSide {
 
   const area = new Map(c.classes.map((k) => [k.name, k.area]));
   const arrows = c.edges.filter((e) => e.planned);
+  // Who depends on each reshaped class today. Classes the plan touches anyway are left out: the risk
+  // is in the callers nobody planned to look at.
+  const inPlan = new Set(planned.map((k) => k.name));
+  const dependents = new Map<string, Set<string>>();
+  for (const e of c.edges) {
+    if (!e.before || e.kind === "inherits" || e.from === e.to || inPlan.has(e.from)) continue;
+    dependents.set(e.to, (dependents.get(e.to) ?? new Set()).add(e.from));
+  }
+  const reshaped = planned.filter((k) => k.status !== "added");
+  const hubs = reshaped
+    .map((k) => ({ name: k.name, role: k.role, dependents: dependents.get(k.name)?.size ?? 0, changes: changeKind(k) }))
+    .filter((h) => h.dependents > 0)
+    .sort((x, y) => y.dependents - x.dependents || x.name.localeCompare(y.name));
+  const behaving = new Set(hubs.filter((h) => h.changes === "behavior").map((h) => h.name));
   const coupling = {
+    reach: new Set([...behaving].flatMap((n) => [...(dependents.get(n) ?? [])])).size,
+    hubs,
     touched: planned.length,
     created: planned.filter((k) => k.status === "added").length,
     reshaped: planned.filter((k) => k.status !== "added").length,
@@ -321,10 +351,15 @@ export function printPlanComparison(c: PlanComparison): string {
     if (shared.length && !own.length) out.push("    none");
     list(own);
   }
-  out.push("", "How tangled");
+  out.push("", "How far each plan's changes reach");
   for (const s of c.sides) {
     const k = s.coupling;
-    out.push(`  ${s.label}: touches ${plural(k.touched, "class", "classes")} (${k.created} new, ${k.reshaped} reshaped), adds ${plural(k.arrows, "new dependency", "new dependencies")}, ${k.crossArea} between business areas`);
+    const changed = k.hubs.filter((h) => h.changes === "behavior");
+    const extended = k.hubs.filter((h) => h.changes === "extends");
+    const hubList = (hs: typeof k.hubs) => hs.map((h) => `${h.name} (${h.dependents})`).join(", ");
+    out.push(`  ${s.label}: ${plural(k.reach, "class", "classes")} outside the plan depend on what it changes${changed.length ? `: ${hubList(changed)}` : ""}`);
+    if (extended.length) out.push(`     only extends, callers unaffected: ${hubList(extended)}`);
+    out.push(`     touches ${plural(k.touched, "class", "classes")} (${k.created} new, ${k.reshaped} reshaped), adds ${plural(k.arrows, "new dependency", "new dependencies")}, ${k.crossArea} between business areas`);
   }
   if (c.flows.length) {
     out.push("", "The same request under each plan");

@@ -87,6 +87,8 @@ export interface PlanClass {
   role?: Role;
   note?: string;
   public: PlanMethod[];
+  /** Public methods the plan takes away, written `-name` in its public list. */
+  remove: PlanMethod[];
   dependsOn: string[];
 }
 
@@ -217,7 +219,8 @@ export function parsePlan(text: string, file = "plan.yml", name = path.basename(
       name: cls,
       role: role && ROLES.includes(role) ? role : undefined,
       note: typeof o.note === "string" ? o.note : undefined,
-      public: rejoin(list(o.public)).map(signature),
+      public: rejoin(list(o.public)).filter((m) => !m.startsWith("-")).map(signature),
+      remove: rejoin(list(o.public)).filter((m) => m.startsWith("-")).map((m) => signature(m.slice(1))),
       dependsOn: list(o.depends_on),
     });
   }
@@ -396,6 +399,9 @@ classes:                                     # new or reshaped classes
     note: One home for charge rules.
     public: [add_fee(fee, qty, by), reprice(charge, cents), self.for(timesheet)]
     depends_on: [Timesheet, TimesheetCharge, Fee]
+  Timesheet:                                 # an existing class: say what it gains, and -name what it loses
+    note: Totals move to TimesheetCharges.   # named with no new methods, a class changes how it behaves
+    public: [charges, -legacy_total]
 
 flows:                                       # call trees for the requests that matter
   "contractor adds a fee":                   # a flat list: each step calls the next

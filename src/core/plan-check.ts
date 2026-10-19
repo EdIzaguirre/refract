@@ -220,6 +220,10 @@ export function checkPlan(plan: Plan, c: Comparison, before: Snapshot, after: Sn
       else if (m.params !== null && built.params !== m.params)
         add("classes", "different", `${label} takes ${plural(built.params, "parameter")}; the plan said ${m.params}`, cls(name, m.name), `Planned as ${m.signature}`);
     }
+    for (const m of k.remove) {
+      if (unit.methods.some((x) => x.name === m.name && x.scope === m.scope && x.visibility === "public"))
+        add("classes", "missing", `${short(name)}${m.scope === "class" ? "." : "#"}${m.name} is still there; the plan takes it away`, cls(name, m.name));
+    }
     const planned = new Set(k.public.map((m) => `${m.scope}:${m.name}`));
     const extra = publicOf(unit)
       .filter((m) => !planned.has(`${m.scope}:${m.name}`) && !was?.methods.some((x) => x.name === m.name && x.scope === m.scope))

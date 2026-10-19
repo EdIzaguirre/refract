@@ -91,7 +91,8 @@ export function PlanPair({ pair }: { pair: PlanComparison }) {
                 </details>
               )}
               {anyTables && (
-                <div className="pair-cols" style={cols}>
+                // Drawings need the width: four plans go two by two here, where text sections stay in one row.
+                <div className="pair-cols" style={{ "--n": n === 4 ? 2 : n } as React.CSSProperties}>
                   {pair.sides.map((s) => (
                     <div key={s.label} className="product planned pair-tables">
                       <div className="pane-tag">Plan {s.label}: tables</div>
@@ -123,7 +124,10 @@ export function PlanPair({ pair }: { pair: PlanComparison }) {
             </section>
 
             <section className="product-part">
-              <h3>How tangled each plan is</h3>
+              <h3>How far each plan's changes reach</h3>
+              <p className="product-note">
+                A new dependency is not a risk in itself. Changing a class many others lean on is: each of them may have to change too. So each plan leads with the existing classes whose behavior it changes (it takes a method away, or names the class without giving it anything new) and how many classes outside the plan depend on them today. A class it only adds methods or associations to is listed apart: its callers keep working.
+              </p>
               <div className="pair-cols" style={cols}>
                 {pair.sides.map((s) => (
                   <Tangle key={s.label} side={s} />
@@ -291,17 +295,39 @@ function SurfaceLayers({ classes }: { classes: SurfaceItem[] }) {
   );
 }
 
+/** How many unplanned classes lean on what the plan changes, the biggest first; what it only extends, and the arrow counts, beneath. */
 function Tangle({ side: s }: { side: PlanSide }) {
   const k = s.coupling;
+  const SHOWN = 4;
+  const changed = k.hubs.filter((h) => h.changes === "behavior");
+  const extended = k.hubs.filter((h) => h.changes === "extends");
   return (
     <div className="pair-cell">
       <div className="pane-tag">Plan {s.label}</div>
       <div className="pair-big">
-        {plural(k.arrows, "new dependency", "new dependencies")}
-        <span>
-          {k.crossArea} between business areas · touches {plural(k.touched, "class", "classes")} ({k.created} new, {k.reshaped} reshaped)
-        </span>
+        {plural(k.reach, "class", "classes")}
+        <span>outside the plan depend on what it changes</span>
       </div>
+      {changed.length > 0 ? (
+        <ul className="pair-hubs">
+          {changed.slice(0, SHOWN).map((h) => (
+            <li key={h.name}>
+              <b>{h.name}</b> <span className="pair-small">{plural(h.dependents, "class", "classes")} depend on it</span>
+            </li>
+          ))}
+          {changed.length > SHOWN && <li className="pair-small">and {plural(changed.length - SHOWN, "more changed class", "more changed classes")}</li>}
+        </ul>
+      ) : (
+        <p className="pair-none">It changes nothing other classes depend on.</p>
+      )}
+      {extended.length > 0 && (
+        <p className="pair-small">
+          Only extends, so callers keep working: {extended.map((h) => `${h.name} (${plural(h.dependents, "dependent")})`).join(", ")}
+        </p>
+      )}
+      <p className="pair-small">
+        {plural(k.arrows, "new dependency", "new dependencies")}, {k.crossArea} between business areas · touches {plural(k.touched, "class", "classes")} ({k.created} new, {k.reshaped} reshaped)
+      </p>
     </div>
   );
 }

@@ -99,6 +99,8 @@ classes:
     note: One home for charge rules.
     public: [add_fee(fee, qty, by), reprice(charge, cents)]
     depends_on: [Timesheet, TimesheetCharge, Fee]
+  Timesheet:                                    # an existing class: what it gains, and -name for what it loses
+    public: [charges, -legacy_total]
 flows:
   "contractor adds a fee":                      # a flat list: each step calls the next
     - Org::Timesheets::ChargesController#create
