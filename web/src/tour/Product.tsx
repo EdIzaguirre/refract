@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import ELK, { type ElkExtendedEdge } from "elkjs/lib/elk.bundled.js";
 import type { ChangeStatus, ProductChanges, ProductPart, Story, TableChange } from "../../../src/shared/types";
 import { splinePath } from "../map/layout";
+import { camelize, singularize } from "../../../src/core/inflect";
 
 /**
  * The first page of the summary: what the change does to the product, read
@@ -268,7 +269,13 @@ interface Words {
 }
 
 /** The line the model holding the column carries, so the label reads one way only: `belongs_to :home_site`. */
-const associationLabel = (r: { column: string; one: boolean }) => `belongs_to :${r.column.replace(/_id$/, "")}${r.one ? " (unique)" : ""}`;
+function associationLabel(r: { column: string; to: string; one: boolean }): string {
+  const name = r.column.replace(/_id$/, "");
+  // Rails names the class when the association is not named after the table: `belongs_to :home_site, class_name: "Site"`.
+  // A second line keeps a long label from widening the drawing.
+  const className = name === singularize(r.to) ? "" : `,\n  class_name: "${camelize(singularize(r.to))}"`;
+  return `belongs_to :${name}${className}${r.one ? " (unique)" : ""}`;
+}
 
 export function TablesDiagram({ tables }: { tables: TableChange[] }) {
   const [drawing, setDrawing] = useState<{ width: number; height: number; boxes: TableBox[]; edges: { path: string; status: ChangeStatus; label: string; words: Words }[] } | null>(null);
@@ -308,7 +315,8 @@ export function TablesDiagram({ tables }: { tables: TableChange[] }) {
         // Each arrow carries its label as ELK's edge label, so the layout leaves room for it.
         edges: refs.map((r, i) => {
           const text = associationLabel(r);
-          return { id: `r${i}`, sources: [r.from], targets: [r.to], labels: [{ text, width: text.length * 6.2, height: 12 }], r } as ElkExtendedEdge & { r: (typeof refs)[number] };
+          const lines = text.split("\n");
+          return { id: `r${i}`, sources: [r.from], targets: [r.to], labels: [{ text, width: Math.max(...lines.map((l) => l.length)) * 6.2, height: 12 * lines.length }], r } as ElkExtendedEdge & { r: (typeof refs)[number] };
         }),
       })
       .then((g) => {
@@ -387,7 +395,11 @@ export function TablesDiagram({ tables }: { tables: TableChange[] }) {
         {/* Drawn after the boxes so no box covers them. */}
         {drawing.edges.map((e, i) => (
           <text key={`w${i}`} className={`tbl-card ${e.status === "added" ? "new" : ""}`} x={e.words.x} y={e.words.y} textAnchor={e.words.anchor}>
-            {e.words.text}
+            {e.words.text.split("\n").map((line, k) => (
+              <tspan key={k} x={e.words.x} dy={k ? 12 : 0} xmlSpace="preserve">
+                {line}
+              </tspan>
+            ))}
           </text>
         ))}
       </svg>
