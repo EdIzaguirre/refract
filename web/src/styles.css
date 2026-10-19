@@ -608,3 +608,4 @@ a { color: var(--accent); }
 .pair-drawings { display: grid; gap: 16px; }
 .pair-drawings .pair-cell { padding-top: 14px; }
 .pair-drawings .figure .pane svg { max-height: 70vh; }
+.pair-toggle { display: inline-flex; align-items: center; gap: 8px; color: var(--muted); font-size: 0.9rem; cursor: pointer; }

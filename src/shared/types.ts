@@ -479,6 +479,7 @@ export interface PlanInfo {
   name: string;
   title: string;
   why?: string;
+  approach?: string;
   file: string;
   /** Changes whenever the file does, so caches keyed on it go stale with it. */
   hash: string;

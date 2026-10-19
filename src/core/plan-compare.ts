@@ -8,7 +8,7 @@ import { planInfo } from "./plan-preview.js";
  * same code, then compared on what they add to the product, how much the rest
  * of the code must learn, how many arrows they add, and how the same request
  * runs under each. Plans have no code, so depth is judged from interfaces and
- * arrows only.
+ * dependencies only.
  */
 
 /** More than this stops fitting side by side, and stops being a comparison anyone can hold in their head. */
@@ -242,10 +242,10 @@ export function note(sides: PlanSide[], rows: ProductRow[], flows: PlanCompariso
   }
   const [less, more] = ends(sides, (s) => s.coupling.arrows);
   if (less.coupling.arrows !== more.coupling.arrows) {
-    first += ` ${less.label === simple.label && winners.size ? `${less.label} also` : `Plan ${less.label}`} adds the fewest arrows between classes (${less.coupling.arrows}, against ${more.coupling.arrows} for ${more.label}), so fewer classes have to change together.`;
+    first += ` ${less.label === simple.label && winners.size ? `${less.label} also` : `Plan ${less.label}`} adds the fewest new dependencies between classes (${less.coupling.arrows}, against ${more.coupling.arrows} for ${more.label}), so fewer classes have to change together.`;
     winners.add(less.label);
   }
-  if (two) first = first.replace("the fewest arrows", "fewer arrows");
+  if (two) first = first.replace("the fewest new dependencies", "fewer new dependencies");
   lines.push(first);
 
   // The book's first test: what the caller has to do. A controller driving many steps does work the module could.
@@ -268,7 +268,7 @@ export function note(sides: PlanSide[], rows: ProductRow[], flows: PlanCompariso
   if (apart) lines.push(`They also differ in the product (${plural(apart, "fact")} above), so settle what to build before weighing how.`);
   else if (winners.size > 1)
     lines.push(`Different plans win on different counts. The chapter allows for that: you may "combine features of multiple alternatives into a new design that is better than any of the original choices."`);
-  lines.push("Plans have no code yet, so this weighs interfaces and arrows only, not how much each class hides behind them.");
+  lines.push("Plans have no code yet, so this weighs interfaces and dependencies only, not how much each class hides behind them.");
   return { lines, source: `Ch 11 "Design it Twice"` };
 }
 
@@ -278,7 +278,7 @@ const NUMBER = ["", "", "Two", "Three", "Four"];
 
 export function printPlanComparison(c: PlanComparison): string {
   const n = c.sides.length;
-  const out: string[] = [`${NUMBER[n] ?? n} plans, drawn against ${c.base.ref} (${c.base.short})`, ...c.sides.map((s) => `  ${s.label}: ${s.plan.title} (${s.plan.name})`), ""];
+  const out: string[] = [`${NUMBER[n] ?? n} plans, drawn against ${c.base.ref} (${c.base.short})`, ...c.sides.flatMap((s) => [`  ${s.label}: ${s.plan.title} (${s.plan.name})`, ...(s.plan.approach ? [`     ${s.plan.approach}`] : [])]), ""];
   out.push("What each adds to the product");
   const apart = c.product.filter((r) => r.where === "some");
   const same = c.product.filter((r) => r.where === "all");
@@ -299,7 +299,7 @@ export function printPlanComparison(c: PlanComparison): string {
   out.push("", "How tangled");
   for (const s of c.sides) {
     const k = s.coupling;
-    out.push(`  ${s.label}: touches ${plural(k.touched, "class", "classes")} (${k.created} new, ${k.reshaped} reshaped), adds ${plural(k.arrows, "arrow")}, ${k.crossArea} between business areas`);
+    out.push(`  ${s.label}: touches ${plural(k.touched, "class", "classes")} (${k.created} new, ${k.reshaped} reshaped), adds ${plural(k.arrows, "new dependency", "new dependencies")}, ${k.crossArea} between business areas`);
   }
   if (c.flows.length) {
     out.push("", "The same request under each plan");

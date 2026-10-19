@@ -79,6 +79,7 @@ Plans live outside the project, at `~/.refract/<owner>-<repo>/plans/<branch>.yml
 ```yaml
 title: Invoices for approved timesheets
 why: Contractors bill orgs for fees and expenses.
+approach: Charges are rows on a new table, priced by one service.
 
 tables:
   fees:              { new: true, belongs_to: orgs, columns: [name, unit, price_cents:integer] }
@@ -106,13 +107,13 @@ flows:
 
 ### Design it twice
 
-Ousterhout's Ch 11 asks for "multiple options for each major design decision". `refract --plan <a> --vs <b>,<c>` draws two to four plans for the same goal against the same code and lays them side by side, product first. Add `--base <branch>` to draw them against a shared core branch instead of the default branch:
+Ousterhout's Ch 11 asks for "multiple options for each major design decision". `refract --plan <a> --vs <b>,<c>` draws two to four plans for the same goal against the same code and lays them side by side, product first. Each plan's heading shows its title and its `approach` (one or two sentences on what sets it apart); `why` is left out, since the plans share the goal. Add `--base <branch>` to draw them against a shared core branch instead of the default branch:
 
 - **What each plan adds to the product**: the tables, states, screens, rules and jobs where they part ways (with each plan's tables drawn), then what they share.
 - **What the rest of the code must learn**: the public methods each plan adds outside controllers, policies, jobs and mailers, with their parameters.
-- **How tangled each plan is**: the arrows it adds between classes and between business areas, drawn in Rails layers.
+- **How tangled each plan is**: the new dependencies it adds between classes and between business areas, drawn in Rails layers. Only new dependencies are drawn: those every plan adds once, then each plan's own. A toggle adds the dependencies that are there today.
 - **The same request under each plan**: flows paired by name (or by the action they start from), as sequence diagrams, with how many calls the entry point makes itself.
-- **One short Ousterhout note**, argued from Ch 11's own questions ("Does one alternative have a simpler interface than another?", "ease of use for higher level software"). Plans have no code, so it weighs interfaces and arrows only.
+- **One short Ousterhout note**, argued from Ch 11's own questions ("Does one alternative have a simpler interface than another?", "ease of use for higher level software"). Plans have no code, so it weighs interfaces and dependencies only.
 
 Edit any of the files and the page follows. `refract plan compare <a> <b> [c] [d]` prints the same in the terminal. In Claude Code, `/refract plan --two <name>` (or `--three`, `--four`) drafts genuinely different plans (`<name>-a`, `<name>-b`, ...), opens them side by side, and once you pick one, saves it as `<name>` so the branch's Plan check uses it. Four is the limit: past that the columns stop fitting and the comparison stops being one you can hold in your head.
 
