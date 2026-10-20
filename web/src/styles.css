@@ -342,7 +342,13 @@ a { color: var(--accent); }
 .pane svg { display: block; width: 100%; height: auto; max-height: 64vh; }
 .pane-tag { position: absolute; top: 10px; left: 14px; font-family: var(--font-mono); font-size: 0.7rem; letter-spacing: 0.14em; text-transform: uppercase; }
 .pane.before .pane-tag { color: var(--before); } .pane.after .pane-tag { color: var(--accent); }
-.fig-edge { fill: none; stroke-width: 1.6; }
+.fig-edge { fill: none; stroke-width: 1.6; transition: opacity 0.35s ease; }
+.fig-box { transition: opacity 0.35s ease; }
+.fig-box.dim, .fig-edge.dim { opacity: 0.08; pointer-events: none; }
+.fig-box .fig-chip rect, .fig-box.planned .fig-chip rect, .fig-box.new .fig-chip rect, .fig-box.changed .fig-chip rect { fill: var(--surface); stroke: var(--accent-mid); stroke-width: 1; stroke-dasharray: none; }
+.fig-box .fig-chip text { font-family: var(--font-mono); font-size: 10px; font-weight: 700; fill: var(--accent); }
+.fig-box .fig-chip.on rect, .fig-box.planned .fig-chip.on rect { fill: var(--accent); stroke: var(--accent); }
+.fig-box .fig-chip.on text { fill: var(--surface); }
 .fig-edge.same { stroke: var(--faint); opacity: 0.7; }
 .fig-edge.new { stroke: var(--good); stroke-width: 2.2; }
 .fig-edge.gone { stroke: var(--bad); stroke-dasharray: 5 4; stroke-width: 2; }
@@ -595,7 +601,15 @@ a { color: var(--accent); }
 @media (max-width: 1100px) { .pair-cols { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 700px) { .pair-cols { grid-template-columns: minmax(0, 1fr); } }
 .pair-legend { display: grid; grid-template-columns: repeat(var(--n, 2), minmax(0, 1fr)); gap: 8px 16px; font-size: 0.86rem; color: var(--muted); }
-.pair-legend span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pair-legend button { all: unset; cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; border-radius: 6px; padding: 2px 6px; }
+.pair-legend button:hover { background: var(--accent-soft); color: var(--ink); }
+.pair-legend button.on { background: var(--accent); color: var(--surface); }
+.pair-legend button.on b { color: var(--surface); }
+.pair-switch { display: inline-flex; border: 1px solid var(--rule); border-radius: 999px; overflow: hidden; width: fit-content; }
+.pair-switch button { all: unset; cursor: pointer; padding: 5px 14px; font-family: var(--font-mono); font-size: 0.85rem; color: var(--muted); }
+.pair-switch button + button { border-left: 1px solid var(--rule); }
+.pair-switch button:hover { background: var(--accent-soft); color: var(--ink); }
+.pair-switch button.on { background: var(--accent); color: var(--surface); }
 .pair-legend b { font-family: var(--font-mono); color: var(--accent); margin-right: 4px; }
 @media (max-width: 700px) { .pair-legend { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 .pair-head { background: var(--surface); border: 1px dashed var(--accent-mid); border-radius: 14px; padding: 14px 18px; display: grid; gap: 6px; }
@@ -649,4 +663,5 @@ a { color: var(--accent); }
 .pair-drawings { display: grid; gap: 16px; }
 .pair-drawings .pair-cell { padding-top: 14px; }
 .pair-drawings .figure .pane svg { max-height: 70vh; }
+.pair-drawings .together .figure .pane svg { max-height: none; width: 100%; height: auto; }
 .pair-toggle { display: inline-flex; align-items: center; gap: 8px; color: var(--muted); font-size: 0.9rem; cursor: pointer; }

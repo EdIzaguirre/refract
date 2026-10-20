@@ -77,7 +77,21 @@ interface Drawing {
 
 const elk = new ELK();
 
-async function layout(c: Comparison, names: string[]): Promise<Drawing> {
+/** Room under a box for its row of plan chips. */
+const CHIPS = 18;
+
+/**
+ * Several plans drawn as one: which plans have each class and each arrow (by "From → To"), and the
+ * plan in focus, if any. Everything not in the focused plan fades; nothing moves, so the shared
+ * layout makes what differs between plans the only thing that changes.
+ */
+export interface PlanMembers {
+  classes: Record<string, string[]>;
+  edges: Record<string, string[]>;
+  focus: string | null;
+}
+
+async function layout(c: Comparison, names: string[], chips = false): Promise<Drawing> {
   const classes = names.map((n) => c.classes.find((k) => k.name === n)).filter((k): k is ClassChange => !!k);
   const set = new Set(classes.map((k) => k.name));
   const edges = c.edges.filter((e) => set.has(e.from) && set.has(e.to) && e.from !== e.to);
@@ -89,8 +103,9 @@ async function layout(c: Comparison, names: string[]): Promise<Drawing> {
       k.shape.before ? `${ROLE_WORD[k.role]} · ${numbers(k.shape.before, null)}`.length : 0,
       k.shape.after ? `${ROLE_WORD[k.role]} · ${numbers(k.shape.after, k.shape.before, k.sizeUnknown)}`.length : 0,
     );
-    const label = Math.max(shortName(k.name).length * 8, nums * 6.4 + 8, 90);
-    return { w: Math.max(b?.w ?? 0, a?.w ?? 0, label), h: Math.max(b?.h ?? 0, a?.h ?? 0) + LABEL_TOP + LABEL_BOTTOM };
+    // Several plans in one drawing show only the role pill under a box (the numbers move to its tooltip), so it stays narrow.
+    const label = chips ? Math.max(shortName(k.name).length * 8, ROLE_WORD[k.role].length * 6.3 + 20, 70) : Math.max(shortName(k.name).length * 8, nums * 6.4 + 8, 90);
+    return { w: Math.max(b?.w ?? 0, a?.w ?? 0, label), h: Math.max(b?.h ?? 0, a?.h ?? 0) + LABEL_TOP + LABEL_BOTTOM + (chips ? CHIPS : 0) };
   };
   const graph = await elk.layout({
     id: "stop",
@@ -102,7 +117,8 @@ async function layout(c: Comparison, names: string[]): Promise<Drawing> {
       "elk.layered.spacing.nodeNodeBetweenLayers": "56",
       "elk.edgeRouting": "SPLINES",
       "elk.layered.considerModelOrder.strategy": "NODES_AND_EDGES",
-      "elk.aspectRatio": "2.4",
+      // Many plans in one drawing get tall and narrow, so the page can show it near full size and scroll.
+      "elk.aspectRatio": chips ? "1.4" : "2.4",
       "elk.partitioning.activate": "true",
       // One layout for every cluster of classes, so the bands line up across all of them.
       "elk.separateConnectedComponents": "false",
@@ -143,21 +159,26 @@ export function StopDiagram({
   classes,
   onOpen,
   only,
+  plans,
 }: {
   comparison: Comparison;
   classes: string[];
   onOpen(name: string): void;
   /** Draw one side alone, under this tag: a plan beside another plan has no "before" of its own. */
   only?: { side: "before" | "after"; tag: string };
+  /** Several plans in one drawing: chips under each box, and the plan in focus. */
+  plans?: PlanMembers;
 }) {
   const [drawing, setDrawing] = useState<Drawing | null>(null);
+  const chips = !!plans;
   useEffect(() => {
     let stale = false;
-    layout(comparison, classes).then((d) => !stale && setDrawing(d));
+    layout(comparison, classes, chips).then((d) => !stale && setDrawing(d));
     return () => {
       stale = true;
     };
-  }, [comparison, classes.join(",")]);
+    // Focus is left out on purpose: switching plans must not move anything.
+  }, [comparison, classes.join(","), chips]);
 
   if (!drawing) return <div className="figure-loading">Drawing…</div>;
   return (
@@ -168,7 +189,7 @@ export function StopDiagram({
           {drawing.nodes.every((n) => !n.change.shape[side]) && (
             <div className="pane-note">{side === "before" ? "None of these classes existed yet." : "All of these classes were removed."}</div>
           )}
-          <Pane drawing={drawing} side={side} onOpen={onOpen} />
+          <Pane drawing={drawing} side={side} onOpen={onOpen} plans={plans} />
         </div>
       ))}
     </div>
@@ -177,7 +198,7 @@ export function StopDiagram({
 
 let figures = 0;
 
-function Pane({ drawing, side, onOpen }: { drawing: Drawing; side: "before" | "after"; onOpen(name: string): void }) {
+function Pane({ drawing, side, onOpen, plans }: { drawing: Drawing; side: "before" | "after"; onOpen(name: string): void; plans?: PlanMembers }) {
   // Two drawings of the same side can share a page, so each needs its own arrowhead ids.
   const [id] = useState(() => `fig-${side}-${figures++}`);
   return (
@@ -201,16 +222,17 @@ function Pane({ drawing, side, onOpen }: { drawing: Drawing; side: "before" | "a
         const present = side === "before" ? r.edge.before > 0 : r.edge.after > 0;
         if (!present) return null;
         const kind = side === "before" ? (r.edge.after === 0 ? "gone" : "same") : r.edge.before === 0 ? "new" : "same";
-        return <path key={i} d={r.path} className={`fig-edge ${kind} ${side === "after" && r.edge.planned ? "planned" : ""}`} markerEnd={`url(#${id}-${kind})`} />;
+        const dim = !!plans?.focus && !(plans.edges[`${r.edge.from} → ${r.edge.to}`] ?? []).includes(plans.focus);
+        return <path key={i} d={r.path} className={`fig-edge ${kind} ${side === "after" && r.edge.planned ? "planned" : ""} ${dim ? "dim" : ""}`} markerEnd={`url(#${id}-${kind})`} />;
       })}
       {drawing.nodes.map((n) => (
-        <Box key={n.change.name} node={n} side={side} onOpen={onOpen} />
+        <Box key={n.change.name} node={n} side={side} onOpen={onOpen} plans={plans} />
       ))}
     </svg>
   );
 }
 
-function Box({ node, side, onOpen }: { node: Placed; side: "before" | "after"; onOpen(name: string): void }) {
+function Box({ node, side, onOpen, plans }: { node: Placed; side: "before" | "after"; onOpen(name: string): void; plans?: PlanMembers }) {
   const k = node.change;
   const shape = k.shape[side];
   const other = k.shape[side === "before" ? "after" : "before"];
@@ -231,7 +253,7 @@ function Box({ node, side, onOpen }: { node: Placed; side: "before" | "after"; o
   const state = side === "before" ? (k.status === "removed" ? "gone" : "plain") : k.status === "added" ? "new" : k.status === "changed" ? "changed" : "plain";
   const space = ns(k.name);
   return (
-    <g className={`fig-box ${state} ${side === "after" && k.planned ? "planned" : ""}`} onClick={() => onOpen(k.name)}>
+    <g className={`fig-box ${state} ${side === "after" && k.planned ? "planned" : ""} ${plans?.focus && !(plans.classes[k.name] ?? []).includes(plans.focus) ? "dim" : ""}`} onClick={() => onOpen(k.name)}>
       <title>{`${k.name}: ${shape.interface} public methods, ${side === "after" && k.sizeUnknown ? "planned, so its size is unknown" : `${shape.codeLines} lines of code`}. Click for its shape, request flow and code.`}</title>
       {space && (
         <text className="fig-ns" x={cx} y={node.y + 10} textAnchor="middle">
@@ -242,7 +264,27 @@ function Box({ node, side, onOpen }: { node: Placed; side: "before" | "after"; o
         {shortName(k.name)}
       </text>
       <rect x={cx - d.w / 2} y={node.y + LABEL_TOP} width={d.w} height={d.h} rx={4} />
-      <RoleLine cx={cx} y={node.y + LABEL_TOP + d.h + 16} role={k.role} text={numbers(shape, side === "after" ? k.shape.before : null, side === "after" && k.sizeUnknown)} />
+      <RoleLine cx={cx} y={node.y + LABEL_TOP + d.h + 16} role={k.role} text={plans ? "" : numbers(shape, side === "after" ? k.shape.before : null, side === "after" && k.sizeUnknown)} />
+      {plans && <PlanChips cx={cx} y={node.y + LABEL_TOP + d.h + 16 + CHIPS} labels={plans.classes[k.name] ?? []} focus={plans.focus} />}
+    </g>
+  );
+}
+
+/** Which plans have this class, as a row of letters; the plan in focus stands out. */
+function PlanChips({ cx, y, labels, focus }: { cx: number; y: number; labels: string[]; focus: string | null }) {
+  const W = 16;
+  const x0 = cx - (labels.length * (W + 3) - 3) / 2;
+  return (
+    <g className="fig-chips">
+      <title>{`In plan${labels.length === 1 ? "" : "s"} ${labels.join(", ")}`}</title>
+      {labels.map((l, i) => (
+        <g key={l} className={`fig-chip ${l === focus ? "on" : ""}`}>
+          <rect x={x0 + i * (W + 3)} y={y - 11} width={W} height={14} rx={4} />
+          <text x={x0 + i * (W + 3) + W / 2} y={y} textAnchor="middle">
+            {l}
+          </text>
+        </g>
+      ))}
     </g>
   );
 }
@@ -267,7 +309,7 @@ function RoleLine({ cx, y, role, text }: { cx: number; y: number; role: Role; te
   const word = ROLE_WORD[role];
   const pillW = word.length * 6.3 + 12;
   const gap = 6;
-  const x0 = cx - (pillW + gap + text.length * 6.4) / 2;
+  const x0 = text ? cx - (pillW + gap + text.length * 6.4) / 2 : cx - pillW / 2;
   return (
     <g>
       <g className={`fig-pill ${PILL[role]}`}>

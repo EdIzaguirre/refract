@@ -1,11 +1,11 @@
 import type React from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { Comparison, PlanComparison, PlanSide, ProductPart, ProductRow } from "../../src/shared/types";
+import type { PlanComparison, PlanSide, ProductPart, ProductRow } from "../../src/shared/types";
 import { type SurfaceItem, byLayer, methodCount, sharedSurface, surfaceClasses } from "../../src/shared/plan-surface";
 import { Logo } from "./VerdictStrip";
 import { TablesDiagram } from "./tour/Product";
 import { ROLE_WORD, StopDiagram } from "./tour/StopDiagram";
-import { dependencyKey, newDependencies, sharedDependencies } from "../../src/shared/plan-dependencies";
+import { drawTogether } from "../../src/shared/plan-dependencies";
 import { Mermaid } from "./Mermaid";
 import { toMermaid } from "./ClassPanel";
 
@@ -29,7 +29,8 @@ export function PlanPair({ pair }: { pair: PlanComparison }) {
   const cols = { "--n": n } as React.CSSProperties;
   const problems = pair.sides.filter((s) => s.plan.problems.length);
   const [today, setToday] = useState(false);
-  const shared = useMemo(() => sharedDependencies(pair.sides), [pair]);
+  const [focus, setFocus] = useState<string | null>(null);
+  const together = useMemo(() => drawTogether(pair.sides, today), [pair, today]);
   const sameSurface = useMemo(() => sharedSurface(pair.sides), [pair]);
   const sameClasses = useMemo(() => surfaceClasses(pair.sides[0], (k) => sameSurface.has(k)), [pair, sameSurface]);
   // Once the plan cards scroll away, the header names each plan, so "Plan C" never needs a trip back up.
@@ -60,9 +61,9 @@ export function PlanPair({ pair }: { pair: PlanComparison }) {
         {headsGone && (
           <div className="pair-legend" style={cols}>
             {pair.sides.map((s) => (
-              <span key={s.label} title={s.plan.title}>
+              <button key={s.label} type="button" title={`${s.plan.title}: show only this plan in the drawing`} className={focus === s.label ? "on" : ""} onClick={() => setFocus(focus === s.label ? null : s.label)}>
                 <b>{s.label}</b> {s.plan.title}
-              </span>
+              </button>
             ))}
           </div>
         )}
@@ -152,26 +153,28 @@ export function PlanPair({ pair }: { pair: PlanComparison }) {
 
             <section className="product-part">
               <h3>The classes each plan adds and what they depend on</h3>
+              <PlanSwitch labels={pair.sides.map((s) => s.label)} titles={pair.sides.map((s) => s.plan.title)} focus={focus} onFocus={setFocus} />
               <label className="pair-toggle">
                 <input type="checkbox" checked={today} onChange={(e) => setToday(e.target.checked)} /> Also draw the dependencies that are there today
               </label>
               <div className="pair-drawings">
-                {today ? (
-                  pair.sides.map((s) => <Drawing key={s.label} side={s} />)
+                {together.classes.length ? (
+                  <div className="pair-cell together">
+                    <StopDiagram
+                      comparison={together.drawing}
+                      classes={together.classes}
+                      onOpen={() => {}}
+                      only={{ side: "after", tag: focus ? `Plan ${focus}: ${pair.sides.find((s) => s.label === focus)!.plan.title}` : `All ${n} plans` }}
+                      plans={{ classes: together.members, edges: together.edgeMembers, focus }}
+                    />
+                  </div>
                 ) : (
-                  <>
-                    {shared.size > 0 && <NewDrawing side={pair.sides[0]} keep={(k) => shared.has(k)} tag={`The same in ${every} plans`} />}
-                    {pair.sides.map((s) => (
-                      <NewDrawing key={s.label} side={s} keep={(k) => !shared.has(k)} tag={shared.size ? `Plan ${s.label} only` : `Plan ${s.label}`} />
-                    ))}
-                  </>
+                  <p className="pair-none">No plan adds a dependency.</p>
                 )}
               </div>
               <p className="product-note">
-                {today
-                  ? "Dashed boxes are planned; classes with no arrows are left out. Green arrows are new dependencies the plan adds; grey ones are there today."
-                  : `Only the new dependencies are drawn${shared.size ? `: those ${every} plans add once, then each plan's own` : ""}. Dashed boxes are planned.`}{" "}
-                Bands run top to bottom: controllers, views (helpers and components), services and jobs, then models, so an arrow pointing up stands out. Each box carries its role as a coloured pill.
+                Every plan&apos;s classes are drawn in one layout, so each class keeps its place whichever plan you look at. The letters under a box say which plans have it; pick a plan to fade out everything it doesn&apos;t have.{" "}
+                {today ? "Green arrows are new dependencies; grey ones are there today." : "Only new dependencies are drawn."} Dashed boxes are planned. Bands run top to bottom: controllers, views (helpers and components), services and jobs, then models, so an arrow pointing up stands out.
               </p>
             </section>
 
@@ -364,34 +367,18 @@ function Existing({ rows, labels, every }: { rows: PlanComparison["existing"]; l
   );
 }
 
-/** The plan's classes and the classes they point at, full width so the boxes stay readable. */
-function Drawing({ side: s }: { side: PlanSide }) {
-  // Classes with no arrows (a policy gaining a rule, a new settings screen) are product facts above; leaving them out keeps the layers in order.
-  const linked = new Set(s.drawing.edges.filter((e) => e.after > 0 && e.from !== e.to).flatMap((e) => [e.from, e.to]));
-  const classes = s.drawing.classes.map((c) => c.name).filter((n) => linked.has(n));
-  if (!classes.length) return null;
+/** All plans, or one: the drawing fades whatever the chosen plan does not have. */
+function PlanSwitch({ labels, titles, focus, onFocus }: { labels: string[]; titles: string[]; focus: string | null; onFocus(l: string | null): void }) {
   return (
-    <div className="pair-cell">
-      <StopDiagram comparison={s.drawing} classes={classes} onOpen={() => {}} only={{ side: "after", tag: `Plan ${s.label}` }} />
-    </div>
-  );
-}
-
-/** Only the new dependencies `keep` picks, and the classes at their ends. */
-function NewDrawing({ side: s, keep, tag }: { side: PlanSide; keep(key: string): boolean; tag: string }) {
-  const drawing = useMemo((): Comparison => ({ ...s.drawing, edges: newDependencies(s).filter((e) => keep(dependencyKey(e))) }), [s, tag]);
-  const linked = new Set(drawing.edges.flatMap((e) => [e.from, e.to]));
-  const classes = drawing.classes.map((c) => c.name).filter((n) => linked.has(n));
-  return (
-    <div className="pair-cell">
-      {classes.length ? (
-        <StopDiagram comparison={drawing} classes={classes} onOpen={() => {}} only={{ side: "after", tag }} />
-      ) : (
-        <>
-          <div className="pane-tag">{tag}</div>
-          <p className="pair-none">No new dependencies of its own.</p>
-        </>
-      )}
+    <div className="pair-switch" role="group" aria-label="Plan to show">
+      <button type="button" className={focus === null ? "on" : ""} onClick={() => onFocus(null)}>
+        All plans
+      </button>
+      {labels.map((l, i) => (
+        <button key={l} type="button" title={titles[i]} className={focus === l ? "on" : ""} onClick={() => onFocus(l)}>
+          {l}
+        </button>
+      ))}
     </div>
   );
 }

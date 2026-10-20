@@ -3,7 +3,7 @@ import { makeSampleRepo } from "../test/sample.js";
 import { Workspace } from "./workspace.js";
 import { parsePlan } from "./plan.js";
 import { printPlanComparison, productFacts } from "./plan-compare.js";
-import { newDependencies, sharedDependencies } from "../shared/plan-dependencies.js";
+import { drawTogether } from "../shared/plan-dependencies.js";
 import { sharedSurface, surfaceClasses } from "../shared/plan-surface.js";
 import { singularize } from "./inflect.js";
 
@@ -74,12 +74,14 @@ describe("two plans side by side", () => {
     // The drawing keeps only what the plan touches and what it points at.
     expect(a.drawing.classes.map((k) => k.name).sort()).toEqual(["Order", "OrdersController", "ReceiptEmailJob", "Receipts", "Receipt"].sort());
 
-    // Both plans add a receipts table that belongs to orders, so that dependency is drawn once; the rest are each plan's own.
-    const shared = sharedDependencies(c.sides);
-    expect([...shared]).toEqual(["Receipt → Order"]);
-    expect(newDependencies(a, shared).map((e) => `${e.from} → ${e.to}`).sort()).toEqual(["OrdersController → Receipts", "Receipts → Order", "Receipts → ReceiptEmailJob"]);
-    // B's only new dependency is the shared one, so B has nothing of its own to draw.
-    expect(newDependencies(b, shared)).toEqual([]);
+    // Both plans drawn as one: the receipts → orders dependency is both plans'; A's Receipts service is A's alone.
+    const together = drawTogether(c.sides, false);
+    expect(together.edgeMembers["Receipt → Order"]).toEqual(["A", "B"]);
+    expect(together.edgeMembers["OrdersController → Receipts"]).toEqual(["A"]);
+    expect(together.members.Receipts).toEqual(["A"]);
+    expect(together.members.Receipt).toEqual(["A", "B"]);
+    // Each class appears once, so it keeps one place whichever plan is in focus.
+    expect(new Set(together.classes).size).toBe(together.classes.length);
 
     // Existing code each plan touches: B adds to Order, A leaves it alone; both add a refund screen to OrdersController.
     const order = c.existing.find((r) => r.name === "Order")!;
