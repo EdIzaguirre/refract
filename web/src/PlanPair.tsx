@@ -59,7 +59,10 @@ export function PlanPair({ pair }: { pair: PlanComparison }) {
           </div>
         </div>
         {headsGone && (
-          <div className="pair-legend" style={cols}>
+          <div className="pair-legend" style={cols} role="group" aria-label="Plan to show in the drawing">
+            <button type="button" className={`all ${focus === null ? "on" : ""}`} title="Show every plan in the drawing" onClick={() => setFocus(null)}>
+              All
+            </button>
             {pair.sides.map((s) => (
               <button key={s.label} type="button" title={`${s.plan.title}: show only this plan in the drawing`} className={focus === s.label ? "on" : ""} onClick={() => setFocus(focus === s.label ? null : s.label)}>
                 <b>{s.label}</b> {s.plan.title}
