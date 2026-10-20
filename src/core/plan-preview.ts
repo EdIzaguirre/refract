@@ -400,5 +400,5 @@ export function planStory(c: Comparison, plan: Plan): Story {
 }
 
 export function planInfo(plan: Plan, mode: "preview" | "check"): NonNullable<Comparison["plan"]> {
-  return { mode, name: plan.name, title: plan.title, why: plan.why, approach: plan.approach, file: plan.file, hash: plan.hash, problems: plan.problems };
+  return { mode, name: plan.name, title: plan.title, why: plan.why, approach: plan.approach, short: plan.short, file: plan.file, hash: plan.hash, problems: plan.problems };
 }

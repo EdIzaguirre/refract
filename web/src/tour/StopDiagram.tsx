@@ -278,7 +278,7 @@ function PlanChips({ cx, y, labels, focus }: { cx: number; y: number; labels: st
     <g className="fig-chips">
       <title>{`In plan${labels.length === 1 ? "" : "s"} ${labels.join(", ")}`}</title>
       {labels.map((l, i) => (
-        <g key={l} className={`fig-chip ${l === focus ? "on" : ""}`}>
+        <g key={l} className={`fig-chip plan-${l.toLowerCase()} ${l === focus ? "on" : ""}`}>
           <rect x={x0 + i * (W + 3)} y={y - 11} width={W} height={14} rx={4} />
           <text x={x0 + i * (W + 3) + W / 2} y={y} textAnchor="middle">
             {l}

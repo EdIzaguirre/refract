@@ -80,6 +80,7 @@ Plans live outside the project, at `~/.refract/<owner>-<repo>/plans/<branch>.yml
 title: Invoices for approved timesheets
 why: Contractors bill orgs for fees and expenses.
 approach: Charges are rows on a new table, priced by one service.
+short: Fee table                                # a word or two naming the plan beside others (compare); defaults to the end of the title
 
 tables:
   fees:              { new: true, belongs_to: orgs, columns: [name, unit, price_cents:integer] }

@@ -480,6 +480,8 @@ export interface PlanInfo {
   title: string;
   why?: string;
   approach?: string;
+  /** A word or two naming the plan beside others. */
+  short?: string;
   file: string;
   /** Changes whenever the file does, so caches keyed on it go stale with it. */
   hash: string;

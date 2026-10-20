@@ -69,6 +69,11 @@ describe("plan files", () => {
     ]);
   });
 
+  it("reads a plan's short name, for when it sits beside others", () => {
+    expect(parsePlan("title: CARE homes, as a small Home model\nshort: Home model\n", "b.yml").short).toBe("Home model");
+    expect(parsePlan("title: Receipts\n", "a.yml").short).toBeUndefined();
+  });
+
   it("counts parameters only when the plan writes them", () => {
     expect(signature("assign_numbers!").params).toBeNull();
     expect(signature("call()").params).toBe(0);
