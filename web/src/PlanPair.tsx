@@ -34,15 +34,11 @@ export function PlanPair({ pair }: { pair: PlanComparison }) {
   const sameSurface = useMemo(() => sharedSurface(pair.sides), [pair]);
   const sameClasses = useMemo(() => surfaceClasses(pair.sides[0], (k) => sameSurface.has(k)), [pair, sameSurface]);
   // Once the plan cards scroll away, the header names each plan, so "Plan C" never needs a trip back up.
+  // While the combined drawing is on screen, those names become its plan switch.
   const heads = useRef<HTMLDivElement>(null);
-  const [headsGone, setHeadsGone] = useState(false);
-  useEffect(() => {
-    const el = heads.current;
-    if (!el) return;
-    const io = new IntersectionObserver(([e]) => setHeadsGone(!e.isIntersecting));
-    io.observe(el);
-    return () => io.disconnect();
-  }, []);
+  const drawingRef = useRef<HTMLElement>(null);
+  const headsGone = !useInView(heads);
+  const drawingShown = useInView(drawingRef);
   return (
     <div className="app">
       <header className="strip">
@@ -59,15 +55,23 @@ export function PlanPair({ pair }: { pair: PlanComparison }) {
           </div>
         </div>
         {headsGone && (
-          <div className="pair-legend" style={cols} role="group" aria-label="Plan to show in the drawing">
-            <button type="button" className={`all ${focus === null ? "on" : ""}`} title="Show every plan in the drawing" onClick={() => setFocus(null)}>
-              All
-            </button>
-            {pair.sides.map((s) => (
-              <button key={s.label} type="button" title={`${s.plan.title}: show only this plan in the drawing`} className={focus === s.label ? "on" : ""} onClick={() => setFocus(focus === s.label ? null : s.label)}>
-                <b>{s.label}</b> {s.plan.title}
+          <div className={`pair-legend ${drawingShown ? "switch" : ""}`} style={cols} role={drawingShown ? "group" : undefined} aria-label={drawingShown ? "Plan to show in the drawing" : undefined}>
+            {drawingShown && (
+              <button type="button" className={`all ${focus === null ? "on" : ""}`} title="Show every plan in the drawing" onClick={() => setFocus(null)}>
+                All
               </button>
-            ))}
+            )}
+            {pair.sides.map((s) =>
+              drawingShown ? (
+                <button key={s.label} type="button" title={`${s.plan.title}: show only this plan in the drawing`} className={focus === s.label ? "on" : ""} onClick={() => setFocus(focus === s.label ? null : s.label)}>
+                  <b>{s.label}</b> {s.plan.title}
+                </button>
+              ) : (
+                <span key={s.label} title={s.plan.title}>
+                  <b>{s.label}</b> {s.plan.title}
+                </span>
+              ),
+            )}
           </div>
         )}
       </header>
@@ -154,7 +158,7 @@ export function PlanPair({ pair }: { pair: PlanComparison }) {
               <Existing rows={pair.existing} labels={pair.sides.map((s) => s.label)} every={every} />
             </section>
 
-            <section className="product-part">
+            <section className="product-part" ref={drawingRef}>
               <h3>The classes each plan adds and what they depend on</h3>
               <PlanSwitch labels={pair.sides.map((s) => s.label)} titles={pair.sides.map((s) => s.plan.title)} focus={focus} onFocus={setFocus} />
               <label className="pair-toggle">
@@ -384,4 +388,17 @@ function PlanSwitch({ labels, titles, focus, onFocus }: { labels: string[]; titl
       ))}
     </div>
   );
+}
+
+/** Whether any part of the element is on screen. */
+function useInView(ref: React.RefObject<Element | null>): boolean {
+  const [shown, setShown] = useState(true);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const io = new IntersectionObserver(([e]) => setShown(e.isIntersecting));
+    io.observe(el);
+    return () => io.disconnect();
+  }, [ref]);
+  return shown;
 }
