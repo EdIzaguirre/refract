@@ -34,11 +34,8 @@ export function PlanPair({ pair }: { pair: PlanComparison }) {
   const sameSurface = useMemo(() => sharedSurface(pair.sides), [pair]);
   const sameClasses = useMemo(() => surfaceClasses(pair.sides[0], (k) => sameSurface.has(k)), [pair, sameSurface]);
   // Once the plan cards scroll away, the header names each plan, so "Plan C" never needs a trip back up.
-  // While the combined drawing is on screen, those names become its plan switch.
   const heads = useRef<HTMLDivElement>(null);
-  const drawingRef = useRef<HTMLElement>(null);
   const headsGone = !useInView(heads);
-  const drawingShown = useInView(drawingRef);
   return (
     <div className="app">
       <header className="strip">
@@ -55,23 +52,12 @@ export function PlanPair({ pair }: { pair: PlanComparison }) {
           </div>
         </div>
         {headsGone && (
-          <div className={`pair-legend ${drawingShown ? "switch" : ""}`} style={cols} role={drawingShown ? "group" : undefined} aria-label={drawingShown ? "Plan to show in the drawing" : undefined}>
-            {drawingShown && (
-              <button type="button" className={`all ${focus === null ? "on" : ""}`} title="Show every plan in the drawing" onClick={() => setFocus(null)}>
-                All
-              </button>
-            )}
-            {pair.sides.map((s) =>
-              drawingShown ? (
-                <button key={s.label} type="button" title={`${s.plan.title}: show only this plan in the drawing`} className={focus === s.label ? "on" : ""} onClick={() => setFocus(focus === s.label ? null : s.label)}>
-                  <b>{s.label}</b> {s.plan.title}
-                </button>
-              ) : (
-                <span key={s.label} title={s.plan.title}>
-                  <b>{s.label}</b> {s.plan.title}
-                </span>
-              ),
-            )}
+          <div className="pair-legend" style={cols}>
+            {pair.sides.map((s) => (
+              <span key={s.label} title={s.plan.title}>
+                <b>{s.label}</b> {s.plan.title}
+              </span>
+            ))}
           </div>
         )}
       </header>
@@ -158,13 +144,16 @@ export function PlanPair({ pair }: { pair: PlanComparison }) {
               <Existing rows={pair.existing} labels={pair.sides.map((s) => s.label)} every={every} />
             </section>
 
-            <section className="product-part" ref={drawingRef}>
+            <section className="product-part">
               <h3>The classes each plan adds and what they depend on</h3>
-              <PlanSwitch labels={pair.sides.map((s) => s.label)} titles={pair.sides.map((s) => s.plan.title)} focus={focus} onFocus={setFocus} />
               <label className="pair-toggle">
                 <input type="checkbox" checked={today} onChange={(e) => setToday(e.target.checked)} /> Also draw the dependencies that are there today
               </label>
-              <div className="pair-drawings">
+              <div className="pair-drawings with-rail">
+                {/* In the margin, and it follows the scroll while the drawing is on screen. */}
+                <div className="pair-rail">
+                  <PlanSwitch labels={pair.sides.map((s) => s.label)} titles={pair.sides.map((s) => s.plan.title)} focus={focus} onFocus={setFocus} />
+                </div>
                 {together.classes.length ? (
                   <div className="pair-cell together">
                     <StopDiagram
@@ -378,8 +367,8 @@ function Existing({ rows, labels, every }: { rows: PlanComparison["existing"]; l
 function PlanSwitch({ labels, titles, focus, onFocus }: { labels: string[]; titles: string[]; focus: string | null; onFocus(l: string | null): void }) {
   return (
     <div className="pair-switch" role="group" aria-label="Plan to show">
-      <button type="button" className={focus === null ? "on" : ""} onClick={() => onFocus(null)}>
-        All plans
+      <button type="button" className={focus === null ? "on" : ""} title="Every plan" onClick={() => onFocus(null)}>
+        All
       </button>
       {labels.map((l, i) => (
         <button key={l} type="button" title={titles[i]} className={focus === l ? "on" : ""} onClick={() => onFocus(l)}>
