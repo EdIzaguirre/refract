@@ -1,5 +1,5 @@
 import type React from "react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { Comparison, PlanComparison, PlanSide, ProductPart, ProductRow } from "../../src/shared/types";
 import { type SurfaceItem, byLayer, methodCount, sharedSurface, surfaceClasses } from "../../src/shared/plan-surface";
 import { Logo } from "./VerdictStrip";
@@ -32,6 +32,16 @@ export function PlanPair({ pair }: { pair: PlanComparison }) {
   const shared = useMemo(() => sharedDependencies(pair.sides), [pair]);
   const sameSurface = useMemo(() => sharedSurface(pair.sides), [pair]);
   const sameClasses = useMemo(() => surfaceClasses(pair.sides[0], (k) => sameSurface.has(k)), [pair, sameSurface]);
+  // Once the plan cards scroll away, the header names each plan, so "Plan C" never needs a trip back up.
+  const heads = useRef<HTMLDivElement>(null);
+  const [headsGone, setHeadsGone] = useState(false);
+  useEffect(() => {
+    const el = heads.current;
+    if (!el) return;
+    const io = new IntersectionObserver(([e]) => setHeadsGone(!e.isIntersecting));
+    io.observe(el);
+    return () => io.disconnect();
+  }, []);
   return (
     <div className="app">
       <header className="strip">
@@ -47,6 +57,15 @@ export function PlanPair({ pair }: { pair: PlanComparison }) {
             </span>
           </div>
         </div>
+        {headsGone && (
+          <div className="pair-legend" style={cols}>
+            {pair.sides.map((s) => (
+              <span key={s.label} title={s.plan.title}>
+                <b>{s.label}</b> {s.plan.title}
+              </span>
+            ))}
+          </div>
+        )}
       </header>
       <div className="main tour-main">
         <div className="tour-stage">
@@ -54,7 +73,7 @@ export function PlanPair({ pair }: { pair: PlanComparison }) {
             <div className="stop-meta">
               Design it twice <span className="plan-tag">planned</span>
             </div>
-            <div className="pair-cols" style={cols}>
+            <div className="pair-cols" style={cols} ref={heads}>
               {pair.sides.map((s) => (
                 <div key={s.label} className="pair-head">
                   <span className="pair-label">Plan {s.label}</span>

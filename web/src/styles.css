@@ -594,6 +594,10 @@ a { color: var(--accent); }
 .pair-cols { display: grid; grid-template-columns: repeat(var(--n, 2), minmax(0, 1fr)); gap: 16px; align-items: start; }
 @media (max-width: 1100px) { .pair-cols { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 700px) { .pair-cols { grid-template-columns: minmax(0, 1fr); } }
+.pair-legend { display: grid; grid-template-columns: repeat(var(--n, 2), minmax(0, 1fr)); gap: 8px 16px; font-size: 0.86rem; color: var(--muted); }
+.pair-legend span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pair-legend b { font-family: var(--font-mono); color: var(--accent); margin-right: 4px; }
+@media (max-width: 700px) { .pair-legend { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 .pair-head { background: var(--surface); border: 1px dashed var(--accent-mid); border-radius: 14px; padding: 14px 18px; display: grid; gap: 6px; }
 .pair-head h2 { margin: 0; font-family: var(--font-display); font-weight: 500; font-size: 1.45rem; line-height: 1.2; }
 .pair-head p { margin: 0; color: var(--ink); line-height: 1.5; }
