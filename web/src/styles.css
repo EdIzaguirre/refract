@@ -626,6 +626,18 @@ a { color: var(--accent); }
 .pair-switch button:hover { background: var(--accent-soft); color: var(--ink); }
 .pair-switch button.on { background: var(--accent); color: var(--surface); }
 .pair-head { background: var(--surface); border: 1px dashed var(--accent-mid); border-radius: 14px; padding: 14px 18px; display: grid; gap: 6px; }
+/* The plans open like a newspaper spread: columns between hairline rules, each led by its letter. */
+.pair-kicker { margin: 0; font-family: var(--font-display); font-size: 1.05rem; color: var(--muted); }
+.pair-kicker i { color: var(--ink); }
+.pair-spread { gap: 0; border-top: 1px solid var(--ink); border-bottom: 1px solid var(--rule); padding: 18px 0 20px; }
+.pair-spread .pair-head { background: none; border: 0; border-radius: 0; padding: 0 22px; align-content: start; gap: 8px; }
+.pair-spread .pair-head + .pair-head { border-left: 1px solid var(--rule); }
+.pair-spread .pair-head:first-child { padding-left: 0; }
+.pair-mark { display: flex; align-items: baseline; gap: 10px; }
+.pair-letter { font-family: var(--font-display); font-style: italic; font-weight: 500; font-size: 3.1rem; line-height: 0.85; color: var(--plan, var(--accent)); }
+.pair-short { font-size: 0.95rem; color: var(--plan, var(--muted)); font-weight: 600; }
+.pair-spread .pair-head h2 { font-size: 1.22rem; }
+.pair-spread .pair-head p { color: var(--muted); font-size: 0.93rem; }
 .pair-head h2 { margin: 0; font-family: var(--font-display); font-weight: 500; font-size: 1.45rem; line-height: 1.2; }
 .pair-head p { margin: 0; color: var(--ink); line-height: 1.5; }
 .pair-label { font-family: var(--font-mono); font-size: 0.72rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--accent); }
@@ -684,8 +696,6 @@ a { color: var(--accent); }
 .plan-b { --plan: var(--plan-b); --plan-soft: var(--plan-b-soft); }
 .plan-c { --plan: var(--plan-c); --plan-soft: var(--plan-c-soft); }
 .plan-d { --plan: var(--plan-d); --plan-soft: var(--plan-d-soft); }
-.pair-head[class*="plan-"] { border: 1px solid var(--rule); border-top: 4px solid var(--plan); }
-.pair-head[class*="plan-"] .pair-label { color: var(--plan); }
 .pane-tag[class*="plan-"], .pair-row.head [role="columnheader"][class*="plan-"] { color: var(--plan); }
 .pair-switch button[class*="plan-"] { color: var(--plan); font-weight: 600; }
 .pair-switch button[class*="plan-"].on { background: var(--plan); color: var(--surface); }
@@ -694,7 +704,7 @@ a { color: var(--accent); }
 .fig-box .fig-chip[class*="plan-"].on rect, .fig-box.planned .fig-chip[class*="plan-"].on rect { fill: var(--plan); stroke: var(--plan); }
 .fig-box .fig-chip[class*="plan-"].on text { fill: var(--surface); }
 
-.pair-nav { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 20px; }
+.pair-nav { display: grid; justify-items: start; gap: 6px; }
 .plan-key { display: flex; flex-wrap: wrap; gap: 6px; }
 .plan-chip-wrap { position: relative; }
 .plan-chip { all: unset; cursor: pointer; display: inline-flex; gap: 6px; align-items: baseline; padding: 3px 11px 3px 4px; border-radius: 999px; background: var(--plan-soft); color: var(--ink); font-size: 0.86rem; }
@@ -704,7 +714,7 @@ a { color: var(--accent); }
 .plan-pop { position: absolute; z-index: 40; top: calc(100% + 8px); left: 0; width: min(360px, 80vw); display: grid; gap: 6px; padding: 12px 14px; background: var(--surface); border: 1px solid var(--rule); border-top: 3px solid var(--plan); border-radius: 10px; box-shadow: var(--shadow); font-size: 0.86rem; line-height: 1.45; color: var(--ink); }
 .plan-pop b { font-weight: 600; }
 .plan-pop code { font-size: 0.75rem; color: var(--faint); overflow-wrap: anywhere; }
-.section-tabs { display: flex; flex-wrap: wrap; gap: 2px; font-size: 0.86rem; }
+.section-tabs { display: flex; flex-wrap: wrap; gap: 2px; font-size: 0.86rem; margin-left: -9px; }
 .section-tabs a { color: var(--muted); text-decoration: none; padding: 4px 9px; border-bottom: 2px solid transparent; }
 .section-tabs a:hover { color: var(--ink); }
 .section-tabs a.on { color: var(--ink); border-bottom-color: var(--accent); }

@@ -64,18 +64,21 @@ export function PlanPair({ pair }: { pair: PlanComparison }) {
       <div className="main tour-main">
         <div className="tour-stage" ref={stage}>
           <article className="stop plan-pair">
-            <div className="stop-meta">
-              Design it twice <span className="plan-tag">planned</span>
-            </div>
-            <div className="pair-cols" style={cols}>
+            <p className="pair-kicker">
+              <i>Design it twice.</i> {NUMBER[n] ?? n} ways to build the same thing, none of them built yet.
+            </p>
+            <div className="pair-cols pair-spread" style={cols}>
               {pair.sides.map((s) => (
                 <div key={s.label} className={`pair-head ${planClass(s.label)}`}>
-                  <span className="pair-label">
-                    Plan {s.label} · {shortName(s.plan)}
-                  </span>
+                  <div className="pair-mark">
+                    <span className="pair-letter">{s.label}</span>
+                    <span className="pair-short">{shortName(s.plan)}</span>
+                  </div>
                   <h2>{s.plan.title}</h2>
                   {s.plan.approach && <p>{s.plan.approach}</p>}
-                  <code className="pair-file">{s.plan.file}</code>
+                  <code className="pair-file" title={s.plan.file}>
+                    {s.plan.file.split("/").pop()}
+                  </code>
                 </div>
               ))}
             </div>
