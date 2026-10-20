@@ -705,6 +705,8 @@ a { color: var(--accent); }
 .fig-box .fig-chip[class*="plan-"].on text { fill: var(--surface); }
 
 .pair-nav { display: grid; justify-items: start; gap: 6px; }
+.pair-nav-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.pair-nav-label { width: 64px; font-size: 0.78rem; color: var(--faint); }
 .plan-key { display: flex; flex-wrap: wrap; gap: 6px; }
 .plan-chip-wrap { position: relative; }
 .plan-chip { all: unset; cursor: pointer; display: inline-flex; gap: 6px; align-items: baseline; padding: 3px 11px 3px 4px; border-radius: 999px; background: var(--plan-soft); color: var(--ink); font-size: 0.86rem; }
@@ -715,6 +717,7 @@ a { color: var(--accent); }
 .plan-pop b { font-weight: 600; }
 .plan-pop code { font-size: 0.75rem; color: var(--faint); overflow-wrap: anywhere; }
 .section-tabs { display: flex; flex-wrap: wrap; gap: 2px; font-size: 0.86rem; margin-left: -9px; }
+.pair-word { font-family: var(--font-display); font-style: italic; font-size: 1.1rem; color: var(--muted); margin-right: -4px; }
 .section-tabs a { color: var(--muted); text-decoration: none; padding: 4px 9px; border-bottom: 2px solid transparent; }
 .section-tabs a:hover { color: var(--ink); }
 .section-tabs a.on { color: var(--ink); border-bottom-color: var(--accent); }

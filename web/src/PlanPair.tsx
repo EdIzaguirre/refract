@@ -57,8 +57,14 @@ export function PlanPair({ pair }: { pair: PlanComparison }) {
           </div>
         </div>
         <div className="pair-nav">
-          <PlanKey sides={pair.sides} />
-          <SectionTabs stage={stage} sections={sections} />
+          <div className="pair-nav-row">
+            <span className="pair-nav-label">Plans</span>
+            <PlanKey sides={pair.sides} />
+          </div>
+          <div className="pair-nav-row">
+            <span className="pair-nav-label">Sections</span>
+            <SectionTabs stage={stage} sections={sections} />
+          </div>
         </div>
       </header>
       <div className="main tour-main">
@@ -71,6 +77,7 @@ export function PlanPair({ pair }: { pair: PlanComparison }) {
               {pair.sides.map((s) => (
                 <div key={s.label} className={`pair-head ${planClass(s.label)}`}>
                   <div className="pair-mark">
+                    <span className="pair-word">Plan</span>
                     <span className="pair-letter">{s.label}</span>
                     <span className="pair-short">{shortName(s.plan)}</span>
                   </div>
