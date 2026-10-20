@@ -1,6 +1,6 @@
 import type React from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { PlanComparison, PlanSide, ProductRow } from "../../src/shared/types";
+import type { PlanComparison, PlanSide, ProductRow, TableChange } from "../../src/shared/types";
 import { type SurfaceItem, byLayer, methodCount, sharedSurface, surfaceClasses } from "../../src/shared/plan-surface";
 import { Logo } from "./VerdictStrip";
 import { TablesDiagram } from "./tour/Product";
@@ -76,16 +76,12 @@ export function PlanPair({ pair }: { pair: PlanComparison }) {
             <div className="pair-cols pair-spread" style={cols}>
               {pair.sides.map((s) => (
                 <div key={s.label} className={`pair-head ${planClass(s.label)}`}>
-                  <div className="pair-mark">
-                    <span className="pair-word">Plan</span>
-                    <span className="pair-letter">{s.label}</span>
-                    <span className="pair-short">{shortName(s.plan)}</span>
+                  <div className="pair-mark" title={`${s.plan.title} (${s.plan.file})`}>
+                    <span className="pair-dot" aria-hidden />
+                    <b>{s.label}</b> {shortName(s.plan)}
                   </div>
-                  <h2>{s.plan.title}</h2>
-                  {s.plan.approach && <p>{s.plan.approach}</p>}
-                  <code className="pair-file" title={s.plan.file}>
-                    {s.plan.file.split("/").pop()}
-                  </code>
+                  <p>{s.plan.approach ?? s.plan.title}</p>
+                  <SchemaGist tables={s.product.tables} />
                 </div>
               ))}
             </div>
@@ -410,6 +406,44 @@ function PlanSwitch({ labels, titles, focus, onFocus }: { labels: string[]; titl
 export const planClass = (label: string) => `plan-${label.toLowerCase()}`;
 
 /** The plan's short name, or the words after the title's last comma ("CARE homes, as a Site" → "Site"). */
+/** The plan's table changes in a few lines: what tells plans apart at a glance, taken from the plan itself. */
+function SchemaGist({ tables }: { tables: TableChange[] }) {
+  if (!tables.length) return <p className="pair-gist pair-none">No table changes.</p>;
+  const SHOWN = 3;
+  return (
+    <dl className="pair-gist">
+      {tables.map((t) => {
+        const isNew = t.status === "added";
+        const cols = t.columns.filter((c) => c.status !== "unchanged");
+        const refs = t.references.filter((r) => r.status === "added");
+        const refOf = (col: string) => refs.find((r) => r.column === col);
+        return (
+          <div key={t.name}>
+            <dt>
+              {t.name}
+              {isNew && <small> new</small>}
+            </dt>
+            {isNew ? (
+              <dd>
+                {cols.slice(0, SHOWN).map((c) => c.name).join(", ")}
+                {cols.length > SHOWN && `, +${cols.length - SHOWN} more`}
+                {refs.length > 0 && <span className="gist-ref"> → {refs.map((r) => r.to).join(", ")}</span>}
+              </dd>
+            ) : (
+              cols.map((c) => (
+                <dd key={c.name}>
+                  {c.status === "removed" ? "−" : "+"} {c.name}
+                  {refOf(c.name) && <span className="gist-ref"> → {refOf(c.name)!.to}</span>}
+                </dd>
+              ))
+            )}
+          </div>
+        );
+      })}
+    </dl>
+  );
+}
+
 function shortName(plan: PlanSide["plan"]): string {
   if (plan.short) return plan.short;
   const tail = plan.title.includes(",") ? plan.title.slice(plan.title.lastIndexOf(",") + 1).trim() : plan.title;
