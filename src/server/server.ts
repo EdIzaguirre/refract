@@ -243,6 +243,17 @@ class Hub {
     return p;
   }
 
+  /** Shows the other side of a view's work, opening it if needed. */
+  async twin(id: string): Promise<LiveState> {
+    const v = this.views.find((x) => x.id === id);
+    if (!v) throw new Error("That view is no longer open.");
+    const found = this.views.find((x) => x.isTwinOf(v));
+    if (found) return found;
+    const r = v.twinRequest();
+    if (!r) throw new Error("This view has no other side to show.");
+    return this.open(r);
+  }
+
   close(id: string) {
     const v = this.views.find((x) => x.id === id);
     if (!v) return;
@@ -311,6 +322,10 @@ class LiveState {
   /** With --vs: every plan being compared, and the comparison itself. */
   group: { name: string; path: string; plan: Plan; mtime: number }[] | null = null;
   private pair: Promise<PlanComparison> | null = null;
+  /** The plan's name, whether it is drawn (preview) or the branch is checked against it. */
+  planName: string | null = null;
+  /** In a preview: a branch of the plan's name exists, so the code it became can be shown. */
+  private built = false;
   /** In a preview, the planned snapshot that request flows read. */
   private planned: Snapshot | null = null;
 
@@ -328,8 +343,22 @@ class LiveState {
   info(): ViewInfo {
     const base = { id: this.id, repo: this.ws.key, live: Boolean(this.watching) };
     if (this.group) return { ...base, kind: "plans", title: this.group.map((g) => g.name).join(" · ") };
-    if (this.preview) return { ...base, kind: "plan", title: this.headName ?? "plan" };
-    return { ...base, kind: "branch", title: this.watching ?? this.headName ?? this.head.slice(0, 9) };
+    if (this.preview) return { ...base, kind: "plan", title: this.headName ?? "plan", twin: this.built ? "code" : undefined };
+    return { ...base, kind: "branch", title: this.watching ?? this.headName ?? this.head.slice(0, 9), twin: this.plan ? "design" : undefined };
+  }
+
+  /** The other side of the same work: a branch's design, or the branch a design became. */
+  twinRequest(): ViewRequest | null {
+    const t = this.info().twin;
+    if (!t || !this.planName) return null;
+    const { repo, quietSeconds } = this.request;
+    return t === "design" ? { repo, quietSeconds, plan: this.planName } : { repo, quietSeconds, watch: this.planName };
+  }
+
+  /** Whether another open view is this one's twin. */
+  isTwinOf(v: LiveState): boolean {
+    if (this.group || v.group || this.ws !== v.ws || !this.planName || this.planName !== v.planName) return false;
+    return this.preview !== v.preview;
   }
 
   /** Says in the terminal what this view shows. */
@@ -354,6 +383,7 @@ class LiveState {
     // The plan this branch is checked against: the one named, else the branch's own, when it exists.
     const planName = this.opts.plan ?? this.watching ?? (range.branch || null);
     if (planName) {
+      this.planName = planName;
       this.planPath = this.ws.planPath(planName);
       this.plan = await loadPlan(this.planPath, planName);
     }
@@ -370,6 +400,8 @@ class LiveState {
     this.planPath = this.ws.planPath(name);
     this.plan = await loadPlan(this.planPath, name);
     if (!this.plan) throw new Error(`No plan at ${this.planPath}. Draft one with /refract plan in Claude Code, or write it by hand (refract plan format shows how).`);
+    this.planName = name;
+    this.built = Boolean(await this.ws.git.tryResolve(`refs/heads/${name}`));
     const { base, from } = await this.ws.planBase(name, this.opts.base);
     this.base = base;
     this.baseFrom = from;
@@ -716,6 +748,14 @@ async function route(hub: Hub, req: http.IncomingMessage, res: http.ServerRespon
       process.stdout.write("A newer Refract took over.\n");
       setTimeout(() => process.exit(0), 50);
       return;
+    }
+    case "/api/views/twin": {
+      if (req.method !== "POST") return json({ error: "POST" }, 405);
+      try {
+        return json({ id: (await hub.twin(q.get("view") ?? "")).id });
+      } catch (e) {
+        return json({ error: (e as Error).message }, 400);
+      }
     }
     case "/api/views": {
       if (req.method === "POST") {

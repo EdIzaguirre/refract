@@ -136,6 +136,39 @@ function flagTitle(what: string) {
   document.addEventListener("visibilitychange", back);
 }
 
+/**
+ * The design and the code it became, one click apart: a branch with a plan,
+ * or a plan whose branch exists, flips between the two.
+ */
+export function TwinToggle() {
+  const { views, current, show } = useContext(ViewsContext);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const me = views.find((v) => v.id === current);
+  if (!me?.twin) return null;
+  const onDesign = me.kind === "plan";
+  const flip = () => {
+    if (busy) return;
+    setBusy(true);
+    setError(null);
+    viewsApi
+      .twin(me.id)
+      .then(({ id }) => show(id))
+      .catch((e: Error) => setError(e.message))
+      .finally(() => setBusy(false));
+  };
+  return (
+    <div className={`seg twin ${busy ? "busy" : ""}`} role="group" aria-label="Design or code" title={error ?? undefined}>
+      <button aria-pressed={onDesign} onClick={onDesign ? undefined : flip} title="The design, drawn against today's code before any was written">
+        Design
+      </button>
+      <button aria-pressed={!onDesign} onClick={onDesign ? flip : undefined} title={`The code on ${me.title}, checked against the design`}>
+        Code
+      </button>
+    </div>
+  );
+}
+
 /** The header's Refract mark: with more than one view open, it lists them to move between. */
 export function ViewSwitch() {
   const { views, current, show, close } = useContext(ViewsContext);

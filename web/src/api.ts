@@ -54,6 +54,7 @@ export const api = {
 /** Everything open in this Refract. */
 export const views = {
   list: () => fetch("/api/views").then((r) => r.json() as Promise<{ views: ViewInfo[] }>),
+  twin: (id: string) => get<{ id: string }>(`/api/views/twin?${q({ view: id })}`, { method: "POST" }),
   close: (id: string) => fetch(`/api/views?${q({ view: id })}`, { method: "DELETE" }).then((r) => r.json() as Promise<{ views: ViewInfo[] }>),
 };
 

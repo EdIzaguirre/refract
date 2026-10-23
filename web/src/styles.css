@@ -751,3 +751,4 @@ a { color: var(--accent); }
 .views-foot { margin: 8px 8px 2px; font-size: 0.76rem; color: var(--muted); }
 .views-foot code { font-family: var(--font-mono); font-size: 0.74rem; }
 .views-toast { position: fixed; top: 64px; right: 18px; z-index: 50; }
+.seg.twin.busy { opacity: 0.6; cursor: progress; }

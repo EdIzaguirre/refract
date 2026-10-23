@@ -1,7 +1,7 @@
 import type { Comparison, Delta, Timeline } from "../../src/shared/types";
 import { RangeLine } from "./RangeLine";
 import type { Screen } from "./App";
-import { ViewSwitch } from "./Views";
+import { TwinToggle, ViewSwitch } from "./Views";
 
 export function Logo() {
   return (
@@ -48,6 +48,7 @@ export function VerdictStrip({
             {more ? "Less" : "More"}
           </button>
         )}
+        <TwinToggle />
         <div className="seg views" role="group" aria-label="View">
           {(["tour", "explore"] as Screen[]).map((v) => (
             <button key={v} aria-pressed={screen === v} onClick={() => onScreen(v)} title={v === "tour" ? "The key changes, explained (t)" : "Poke around the whole codebase (e)"}>

@@ -422,6 +422,8 @@ export interface ViewInfo {
   title: string;
   /** A branch Refract is following for new commits. */
   live: boolean;
+  /** The other side of the same work, when there is one: a branch's design, or the code a design became. */
+  twin?: "design" | "code";
 }
 
 // ---------- product ----------
