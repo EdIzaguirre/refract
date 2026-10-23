@@ -1,6 +1,7 @@
 import type { Comparison, Delta, Timeline } from "../../src/shared/types";
 import { RangeLine } from "./RangeLine";
 import type { Screen } from "./App";
+import { ViewSwitch } from "./Views";
 
 export function Logo() {
   return (
@@ -34,10 +35,7 @@ export function VerdictStrip({
   return (
     <header className="strip">
       <div className="strip-top">
-        <div className="brand">
-          <Logo />
-          Refract
-        </div>
+        <ViewSwitch />
         {c && (
           <div className="refs">
             <span>{c.repo.name}</span>

@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import type { Comparison, LensReport, PlanComparison, Sequence, ServerEvent, Story, Timeline } from "../../src/shared/types";
+import type { Comparison, LensReport, PlanComparison, Sequence, ServerEvent, Story, Timeline, ViewInfo } from "../../src/shared/types";
 
 export interface AppState {
   timeline: Timeline;
@@ -13,7 +13,12 @@ export interface AppState {
   plans?: PlanComparison;
 }
 
+/** The view this tab shows; every question below is about it. */
+let current: string | null = null;
+export const setView = (id: string | null) => (current = id);
+
 async function get<T>(url: string, init?: RequestInit): Promise<T> {
+  if (current) url += `${url.includes("?") ? "&" : "?"}view=${encodeURIComponent(current)}`;
   const res = await fetch(url, init);
   const body = await res.json();
   if (!res.ok) throw new Error((body as { error?: string }).error ?? res.statusText);
@@ -46,13 +51,32 @@ export const api = {
   draftAreas: () => get<{ started: boolean }>("/api/areas/draft", { method: "POST" }),
 };
 
+/** Everything open in this Refract. */
+export const views = {
+  list: () => fetch("/api/views").then((r) => r.json() as Promise<{ views: ViewInfo[] }>),
+  close: (id: string) => fetch(`/api/views?${q({ view: id })}`, { method: "DELETE" }).then((r) => r.json() as Promise<{ views: ViewInfo[] }>),
+};
+
+const listeners = new Set<(e: ServerEvent) => void>();
+
+/** One event stream per tab, for the view it shows; the shell reconnects it when the view changes. */
+export function connect(view: string | null, onHub: (e: ServerEvent) => void): () => void {
+  const source = new EventSource(view ? `/api/events?${q({ view })}` : "/api/events");
+  source.onmessage = (m) => {
+    const e = JSON.parse(m.data) as ServerEvent;
+    if (e.type === "views" || e.type === "open") onHub(e);
+    else if (!e.view || e.view === view) for (const l of listeners) l(e);
+  };
+  return () => source.close();
+}
+
 /** Server-sent events: new commits, comparisons, lens progress and status lines. */
 export function useEvents(onEvent: (e: ServerEvent) => void) {
   const handler = useRef(onEvent);
   handler.current = onEvent;
   useEffect(() => {
-    const source = new EventSource("/api/events");
-    source.onmessage = (m) => handler.current(JSON.parse(m.data) as ServerEvent);
-    return () => source.close();
+    const l = (e: ServerEvent) => handler.current(e);
+    listeners.add(l);
+    return () => void listeners.delete(l);
   }, []);
 }

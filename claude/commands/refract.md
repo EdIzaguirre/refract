@@ -8,6 +8,8 @@ Refract shows how a code change reshaped this codebase: what changed in the prod
 
 The arguments are: `$ARGUMENTS`
 
+Refract is one browser tab. The first `refract` starts it; every later one (a plan, plans side by side, another branch) opens in that same tab and returns at once, so there is only ever one Refract running. When the log says the tab switched, tell me it is open in my Refract tab rather than handing me a new link.
+
 If they start with `plan --two`, `plan --three` or `plan --four` (or `plan` and ask for several designs), follow **Draft several plans** below. If they start with `plan`, follow **Draft a plan**. Otherwise follow **Open the map**.
 
 ## Open the map
