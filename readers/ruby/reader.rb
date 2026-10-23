@@ -80,7 +80,7 @@ module Refract
     ClassFacts = Struct.new(
       :name, :kind, :line, :end_line, :superclass, :nested_in, :methods, :includes, :extends,
       :references, :callbacks, :associations, :validations, :scopes, :helper_methods, :delegates,
-      :nested_ranges, :code_lines, :ivars, keyword_init: true
+      :nested_ranges, :code_lines, :ivars, :composes, keyword_init: true
     ) do
       def to_h
         {
@@ -89,7 +89,7 @@ module Refract
           "methods" => methods.map(&:to_h), "includes" => includes.uniq, "extends" => extends.uniq,
           "references" => references.uniq.sort, "callbacks" => callbacks, "associations" => associations,
           "validations" => validations, "scopes" => scopes, "helperMethods" => helper_methods.uniq,
-          "delegates" => delegates, "ivars" => ivars.uniq.sort
+          "delegates" => delegates, "ivars" => ivars.uniq.sort, "composes" => composes.uniq
         }
       end
     end
@@ -129,6 +129,7 @@ module Refract
         when Prism::InstanceVariableReadNode, Prism::InstanceVariableWriteNode,
              Prism::InstanceVariableOrWriteNode, Prism::InstanceVariableOperatorWriteNode
           current&.ivars&.push(node.name.to_s)
+          composed(node)
           node.compact_child_nodes.each { |c| walk(c) }
         else
           node.compact_child_nodes.each { |c| walk(c) }
@@ -150,7 +151,7 @@ module Refract
           line: node.location.start_line, end_line: node.location.end_line, superclass: superclass,
           nested_in: current&.name, methods: [], includes: [], extends: [], references: [], callbacks: [],
           associations: [], validations: 0, scopes: [], helper_methods: [], delegates: [], nested_ranges: [],
-          ivars: []
+          ivars: [], composes: []
         )
         current.nested_ranges << (facts.line..facts.end_line) if current
         @classes << facts
@@ -267,8 +268,11 @@ module Refract
           args.each { |a| (s = symbol(a)) && add_method(cls, s, "instance", frame[1], node, "attr") }
         when *ASSOCIATIONS
           if (s = symbol(args.first))
-            class_name = keyword_string(args, "class_name")
-            cls.associations << { "kind" => name, "name" => s, "className" => class_name }.compact
+            cls.associations << {
+              "kind" => name, "name" => s, "className" => keyword_string(args, "class_name"),
+              "dependent" => keyword_string(args, "dependent"), "through" => keyword_string(args, "through"),
+              "optional" => keyword_true(args, "optional") || nil
+            }.compact
           end
         when *CALLBACKS
           cls.callbacks << { "kind" => name, "targets" => args.filter_map { |a| symbol(a) } }
@@ -320,6 +324,25 @@ module Refract
 
         pair = hash.elements.find { |e| e.respond_to?(:key) && symbol(e.key) == key }
         pair && symbol(pair.value)
+      end
+
+      def keyword_true(args, key)
+        hash = args.find { |a| a.is_a?(Prism::KeywordHashNode) }
+        pair = hash&.elements&.find { |e| e.respond_to?(:key) && symbol(e.key) == key }
+        pair&.value.is_a?(Prism::TrueNode)
+      end
+
+      # An object the class makes for itself and keeps: `@parts = Parts.new(...)` in initialize, or
+      # memoized anywhere (`@parts ||= Parts.new`). The holder owns it, which UML draws as composition.
+      def composed(node)
+        return unless current && @method
+        return unless node.is_a?(Prism::InstanceVariableWriteNode) && @method.name == "initialize" ||
+                      node.is_a?(Prism::InstanceVariableOrWriteNode)
+
+        value = node.value
+        return unless value.is_a?(Prism::CallNode) && value.name == :new && constant?(value.receiver)
+
+        current.composes << { "ivar" => node.name.to_s.delete_prefix("@"), "className" => value.receiver.slice.delete_prefix("::") }
       end
 
       def constant?(node)

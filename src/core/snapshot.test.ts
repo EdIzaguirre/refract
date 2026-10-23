@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { ClassFacts, FileFacts } from "../shared/types.js";
-import { assemble } from "./snapshot.js";
+import { assemble, holding } from "./snapshot.js";
 
 const facts = (name: string, over: Partial<ClassFacts> = {}): ClassFacts => ({
   name,
@@ -52,4 +52,28 @@ describe("assemble", () => {
     );
     expect(snap.classes.Billing.role).toBe("service");
   });
+
+  it("reads Rails associations and kept objects as UML holdings: how many, and whether the holder owns them", () => {
+    expect(holding({ kind: "has_many", name: "spokes", dependent: "destroy" })).toEqual({ many: "*", owns: true });
+    expect(holding({ kind: "has_many", name: "spokes" })).toEqual({ many: "*", owns: false });
+    expect(holding({ kind: "has_one", name: "bell", dependent: "nullify" })).toEqual({ many: "0..1", owns: false });
+    expect(holding({ kind: "belongs_to", name: "shop" })).toEqual({ many: "1", owns: false });
+    expect(holding({ kind: "belongs_to", name: "shop", optional: true })).toEqual({ many: "0..1", owns: false });
+    expect(holding({ kind: "has_many", name: "riders", through: "rentals", dependent: "destroy" })).toBeUndefined();
+
+    const snap = assemble(
+      "c1",
+      [
+        file("app/models/bicycle.rb", [
+          facts("Bicycle", { kind: "class", associations: [{ kind: "has_many", name: "spokes", dependent: "destroy" }], composes: [{ ivar: "parts", className: "Parts" }] }),
+        ]),
+        file("app/models/spoke.rb", [facts("Spoke", { kind: "class" })]),
+        file("app/models/parts.rb", [facts("Parts", { kind: "class" })]),
+      ],
+      [],
+    );
+    const to = Object.fromEntries(snap.classes.Bicycle.dependsOn.map((d) => [d.to, d.has]));
+    expect(to).toEqual({ Parts: { many: "1", owns: true }, Spoke: { many: "*", owns: true } });
+  });
 });
+

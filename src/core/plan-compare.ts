@@ -33,7 +33,8 @@ export function comparePlans(base: { ref: string; short: string }, plans: { plan
 }
 
 /** An association as its Rails line reads: `belongs_to :home_site, class_name: "Site"`. */
-const associationLine = (a: AssociationFacts) => `${a.kind} :${a.name}${a.className ? `, class_name: "${a.className}"` : ""}`;
+const associationLine = (a: AssociationFacts) =>
+  `${a.kind} :${a.name}${a.className ? `, class_name: "${a.className}"` : ""}${a.dependent ? `, dependent: :${a.dependent}` : ""}`;
 
 /**
  * What a plan says it does to an existing class, from the plan alone: the public methods and associations

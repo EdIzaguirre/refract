@@ -26,6 +26,11 @@ export interface AssociationFacts {
   kind: string;
   name: string;
   className?: string;
+  /** `dependent: :destroy` and the like: the records go when their owner goes. */
+  dependent?: string;
+  through?: string;
+  /** `belongs_to ..., optional: true`. */
+  optional?: boolean;
 }
 
 export interface ClassFacts {
@@ -49,6 +54,8 @@ export interface ClassFacts {
   helperMethods: string[];
   delegates: string[];
   ivars: string[];
+  /** Objects the class makes and keeps: `@parts = Parts.new` in initialize, or `@parts ||= Parts.new`. Older cached facts lack it. */
+  composes?: { ivar: string; className: string }[];
 }
 
 export interface FileFacts {
@@ -111,6 +118,17 @@ export interface Dependency {
   to: string;
   kind: "inherits" | "includes" | "association" | "reference" | "call";
   count: number;
+  /** For an association or a kept object: how many the class holds and whether it owns them. */
+  has?: Holding;
+}
+
+/**
+ * UML's reading of a "has" relationship (Metz, POODR ch 8): `many` is how many the holder keeps
+ * ("1", "0..1" or "*"), and `owns` is composition, the black diamond: the parts go when the whole goes.
+ */
+export interface Holding {
+  many: "1" | "0..1" | "*";
+  owns: boolean;
 }
 
 export interface Snapshot {
@@ -196,6 +214,8 @@ export interface EdgeChange {
   after: number;
   /** In a plan preview: a dependency the plan adds. */
   planned?: boolean;
+  /** How many the class holds and whether it owns them, on the side the edge is drawn from (after, else before). */
+  has?: Holding;
 }
 
 export interface AreaChange {

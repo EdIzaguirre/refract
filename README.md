@@ -84,6 +84,7 @@ short: Fee table                                # a word or two naming the plan 
 
 tables:
   fees:              { new: true, belongs_to: orgs, columns: [name, unit, price_cents:integer] }
+  timesheet_charges: { new: true, part_of: timesheets, belongs_to: fees, columns: [description] }  # part_of: goes when its timesheet goes
   timesheets:        { add: [sent_at, sent_by_id] }
   invoices:          { add: [billed_to_id], belongs_to: { billed_to: orgs } }   # a map when the column is not <table>_id
 lifecycles:
@@ -140,6 +141,10 @@ areas:
 ```
 
 A class goes to the first area whose `classes` globs match its name, else the first whose `paths` match one of its files. A class no glob matches (often one the change just added) follows its name, then the area most of its collaborators live in. Views and tests follow the class they belong to. Until an `areas.yml` exists, Refract infers areas from the dependency graph and class names.
+
+## What a class holds
+
+Relationship arrows use the UML notation Metz draws in POODR ch 8. A black diamond at the holder's end means composition: the holder owns its parts and they go when it goes. Refract draws it for `has_many` or `has_one` with `dependent: :destroy` (or `:delete_all`), and for an object a class makes and keeps itself (`@parts = Parts.new` in `initialize`, or `@parts ||= Parts.new`). The number at the far end is how many it holds: `has_many` is `*`, `has_one` is `0..1`, and `belongs_to` is `1`, or `0..1` when it is `optional: true`. A collaborator passed in from outside, or a `through:` association, gets a plain arrow, since the code does not say who owns it. In a plan, `part_of: <table>` says the owner has many of the new rows and takes them with it.
 
 ## Request flows
 

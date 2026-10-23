@@ -24,7 +24,7 @@ const SKIP_DIRS = /(^|\/)(test|spec|vendor|node_modules|db|tmp|log|coverage|publ
 
 export class RubyReader implements Reader {
   readonly language = "ruby";
-  readonly version = "ruby-2";
+  readonly version = "ruby-3";
 
   constructor(private readonly ruby = process.env.REFRACT_RUBY ?? "ruby") {}
 

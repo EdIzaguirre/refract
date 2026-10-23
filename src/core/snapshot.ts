@@ -1,6 +1,6 @@
 import fs from "node:fs/promises";
 import path from "node:path";
-import type { ClassFacts, ClassUnit, Dependency, FileFacts, MethodFacts, Role, Snapshot } from "../shared/types.js";
+import type { AssociationFacts, ClassFacts, ClassUnit, Dependency, FileFacts, Holding, MethodFacts, Role, Snapshot } from "../shared/types.js";
 import type { Git } from "./git.js";
 import type { Reader } from "./reader.js";
 import { camelize, singularize, underscore } from "./inflect.js";
@@ -154,13 +154,14 @@ export function assemble(commit: string, facts: FileFacts[], allFiles: string[])
   const rank: Record<Dependency["kind"], number> = { inherits: 5, includes: 4, association: 3, call: 2, reference: 1 };
   for (const [unit, list] of refs) {
     const deps = new Map<string, Dependency>();
-    const add = (to: string | null, kind: Dependency["kind"]) => {
+    const add = (to: string | null, kind: Dependency["kind"], has?: Holding) => {
       if (!to || to === unit) return;
       const existing = deps.get(to);
-      if (!existing) deps.set(to, { to, kind, count: 1 });
+      if (!existing) deps.set(to, { to, kind, count: 1, ...(has ? { has } : {}) });
       else {
         existing.count += 1;
         if (rank[kind] > rank[existing.kind]) existing.kind = kind;
+        if (has) existing.has = existing.has ? strongest(existing.has, has) : has;
       }
     };
     for (const { facts: c, scope } of list) {
@@ -169,8 +170,9 @@ export function assemble(commit: string, facts: FileFacts[], allFiles: string[])
       for (const inc of [...c.includes, ...c.extends]) add(resolve(inc, scope), "includes");
       for (const a of c.associations) {
         const target = a.className ?? camelize(a.kind === "has_many" || a.kind === "has_and_belongs_to_many" ? singularize(a.name) : a.name);
-        add(resolve(target, scope), "association");
+        add(resolve(target, scope), "association", holding(a));
       }
+      for (const k of c.composes ?? []) add(resolve(k.className, scope), "reference", { many: "1", owns: true });
       const seen = new Set<string>();
       for (const r of c.references) {
         if (r === c.superclass || c.includes.includes(r)) continue;
@@ -233,4 +235,22 @@ function roleOf(file: string, c: ClassFacts): Role {
 
 function uniq<T>(xs: T[]): T[] {
   return [...new Set(xs)];
+}
+
+const OWNING = new Set(["destroy", "delete_all", "delete", "destroy_async"]);
+const MANY_RANK = { "0..1": 0, "1": 1, "*": 2 } as const;
+
+/** How Rails says one class holds another: has_many is "*", has_one "0..1", belongs_to "1" unless optional. */
+export function holding(a: AssociationFacts): Holding | undefined {
+  // A through association reaches its records via another class, which is the one that holds them.
+  if (a.through) return undefined;
+  const owns = !!a.dependent && OWNING.has(a.dependent);
+  if (a.kind === "has_many" || a.kind === "has_and_belongs_to_many") return { many: "*", owns };
+  if (a.kind === "has_one") return { many: "0..1", owns };
+  if (a.kind === "belongs_to") return { many: a.optional ? "0..1" : "1", owns: false };
+  return undefined;
+}
+
+function strongest(a: Holding, b: Holding): Holding {
+  return { many: MANY_RANK[a.many] >= MANY_RANK[b.many] ? a.many : b.many, owns: a.owns || b.owns };
 }

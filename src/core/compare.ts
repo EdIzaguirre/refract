@@ -87,6 +87,9 @@ export function compare(input: CompareInput): Comparison {
         const e = edges.get(k) ?? { from: u.name, to: d.to, kind: d.kind, status: "unchanged", before: 0, after: 0 };
         e[side] = d.count;
         if (side === "after") e.kind = d.kind;
+        // What the class holds, read from the side the edge is drawn from: after, else before.
+        if (d.has && (side === "after" || !e.has)) e.has = d.has;
+        else if (side === "after" && !d.has) delete e.has;
         edges.set(k, e);
       }
     }

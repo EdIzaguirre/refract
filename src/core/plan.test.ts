@@ -122,6 +122,14 @@ describe("plans against the sample shop", () => {
     expect(c.edges.find((e) => e.from === "Order" && e.to === "Checkout")).toMatchObject({ planned: true });
   });
 
+  it("draws part_of as composition: the owner has many and takes them with it", async () => {
+    const plan = parsePlan("tables:\n  order_notes: { new: true, part_of: orders, columns: [body] }\n", "notes.yml");
+    expect(plan.tables[0]).toMatchObject({ partOf: ["orders"], belongsTo: [{ to: "orders", column: "order_id" }] });
+    const { comparison: c } = await ws.previewPlan(plan, "main");
+    expect(c.edges.find((e) => e.from === "Order" && e.to === "OrderNote")).toMatchObject({ planned: true, has: { many: "*", owns: true } });
+    expect(c.edges.find((e) => e.from === "OrderNote" && e.to === "Order")).toMatchObject({ has: { many: "1", owns: false } });
+  });
+
   it("checks a reference by its column as well as its table", () => {
     const t = parsePlan("tables:\n  matters: { add: [home_site_id], belongs_to: { home_site: sites } }\n").tables[0];
     // Built on the court's site_id instead of a new column: still a reference to sites, but not the planned one.

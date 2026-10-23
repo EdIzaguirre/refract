@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import ELK, { type ElkExtendedEdge } from "elkjs/lib/elk.bundled.js";
 import type { ClassChange, Comparison, EdgeChange, Role, Shape } from "../../../src/shared/types";
 import { boxDims, splinePath } from "../map/layout";
+import { DiamondMarker, Multiplicity, nearEnd } from "../holding";
 
 /**
  * A stop's drawing: only the stop's classes, before and after side by side,
@@ -64,6 +65,8 @@ interface Placed {
 interface Routed {
   edge: EdgeChange;
   path: string;
+  /** Where the multiplicity goes, near the arrowhead. */
+  tail?: { x: number; y: number };
 }
 
 interface Drawing {
@@ -141,7 +144,8 @@ async function layout(c: Comparison, names: string[], chips = false): Promise<Dr
   const routed = ((graph.edges ?? []) as (ElkExtendedEdge & { e: EdgeChange })[]).flatMap((ge) => {
     const s = ge.sections?.[0];
     if (!s) return [];
-    return [{ edge: ge.e, path: splinePath([s.startPoint, ...(s.bendPoints ?? []), s.endPoint].map((p) => ({ x: p.x + PAD, y: p.y + PAD + HEAD }))) }];
+    const pts = [s.startPoint, ...(s.bendPoints ?? []), s.endPoint].map((p) => ({ x: p.x + PAD, y: p.y + PAD + HEAD }));
+    return [{ edge: ge.e, path: splinePath(pts), tail: nearEnd(pts) }];
   });
   const layers = LAYERS.flatMap((l, i) => {
     const inLayer = nodes.filter((n) => layerOf(n.change.role) === i);
@@ -209,6 +213,9 @@ function Pane({ drawing, side, onOpen, plans }: { drawing: Drawing; side: "befor
             <path d="M0 1L10 5L0 9z" className={`fig-mk ${k}`} />
           </marker>
         ))}
+        {(["new", "gone", "same"] as const).map((k) => (
+          <DiamondMarker key={`own-${k}`} id={`${id}-own-${k}`} className={`fig-mk ${k}`} />
+        ))}
       </defs>
       {drawing.layers.map((l) => (
         <g key={l.title}>
@@ -223,7 +230,17 @@ function Pane({ drawing, side, onOpen, plans }: { drawing: Drawing; side: "befor
         if (!present) return null;
         const kind = side === "before" ? (r.edge.after === 0 ? "gone" : "same") : r.edge.before === 0 ? "new" : "same";
         const dim = !!plans?.focus && !(plans.edges[`${r.edge.from} → ${r.edge.to}`] ?? []).includes(plans.focus);
-        return <path key={i} d={r.path} className={`fig-edge ${kind} ${side === "after" && r.edge.planned ? "planned" : ""} ${dim ? "dim" : ""}`} markerEnd={`url(#${id}-${kind})`} />;
+        return (
+          <g key={i}>
+            <path
+              d={r.path}
+              className={`fig-edge ${kind} ${side === "after" && r.edge.planned ? "planned" : ""} ${dim ? "dim" : ""}`}
+              markerEnd={`url(#${id}-${kind})`}
+              markerStart={r.edge.has?.owns ? `url(#${id}-own-${kind})` : undefined}
+            />
+            {!dim && <Multiplicity at={r.tail} has={r.edge.has} className={kind} />}
+          </g>
+        );
       })}
       {drawing.nodes.map((n) => (
         <Box key={n.change.name} node={n} side={side} onOpen={onOpen} plans={plans} />
