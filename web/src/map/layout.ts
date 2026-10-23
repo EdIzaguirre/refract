@@ -1,5 +1,6 @@
 import ELK, { type ElkNode, type ElkExtendedEdge } from "elkjs/lib/elk.bundled.js";
 import type { AreaChange, ClassChange, Comparison, EdgeChange, Shape } from "../../../src/shared/types";
+import { nearEnd } from "../holding";
 
 /**
  * Turns a Comparison into map geometry. Every class is an Ousterhout box:
@@ -47,6 +48,8 @@ export interface EdgeRoute {
   edge: EdgeChange;
   path: string;
   cross: boolean;
+  /** Where the multiplicity goes, near the arrowhead; routed edges only. */
+  tail?: { x: number; y: number };
 }
 
 export interface AreaLink {
@@ -237,6 +240,7 @@ export async function layoutMap(c: Comparison): Promise<MapLayout> {
               edge: le.e,
               path: splinePath(le.sections.map((p) => ({ x: p.x + fx, y: p.y + fy }))),
               cross: false,
+              tail: nearEnd(le.sections.map((p) => ({ x: p.x + fx, y: p.y + fy }))),
             });
           }
           const cyTop = fy + featH + gap;

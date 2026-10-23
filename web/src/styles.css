@@ -362,6 +362,10 @@ a { color: var(--accent); }
 .fig-edge.new { stroke: var(--good); stroke-width: 2.2; }
 .fig-edge.gone { stroke: var(--bad); stroke-dasharray: 5 4; stroke-width: 2; }
 .fig-mk.same { fill: var(--faint); } .fig-mk.new { fill: var(--good); } .fig-mk.gone { fill: var(--bad); }
+/* Multiplicity at the held end of a "has" line (UML, as in POODR ch 8). */
+.fig-many { font-family: var(--font-mono); font-size: 11px; font-weight: 500; fill: var(--muted); paint-order: stroke; stroke: var(--paper); stroke-width: 3px; }
+.fig-many.new { fill: var(--good); } .fig-many.gone { fill: var(--bad); }
+.map-many.accent { fill: var(--accent); } .map-many.bad { fill: var(--bad); } .map-many.ink { fill: var(--ink); }
 .fig-box { cursor: pointer; }
 .fig-box rect { fill: var(--before-soft); stroke: var(--before); stroke-width: 1.3; transition: stroke-width 0.15s; }
 .fig-box.changed rect { fill: var(--surface); stroke: var(--accent); stroke-width: 2.2; }

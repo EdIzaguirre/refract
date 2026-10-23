@@ -32,6 +32,11 @@ export interface PlanTable {
    * `belongs_to: orgs` is org_id, and `belongs_to: { home_site: sites }` is home_site_id pointing at sites.
    */
   belongsTo: PlanReference[];
+  /**
+   * The tables among belongsTo whose rows own this table's rows (`part_of: invoices`): the owner
+   * `has_many` these with `dependent: :destroy`. Drawn as composition, Metz's black diamond.
+   */
+  partOf: string[];
   /** For a new table: its columns. */
   columns: PlanColumn[];
   /** For an existing table: columns to add and to drop. */
@@ -179,7 +184,9 @@ export function parsePlan(text: string, file = "plan.yml", name = path.basename(
     plan.tables.push({
       name: table,
       isNew,
-      belongsTo: references(o.belongs_to),
+      // part_of is a belongs_to as well, so a table can name its owner once.
+      belongsTo: [...references(o.belongs_to), ...references(o.part_of).filter((r) => !references(o.belongs_to).some((b) => b.column === r.column))],
+      partOf: references(o.part_of).map((r) => r.to),
       columns: columns(o.columns),
       add: columns(o.add),
       remove: list(o.remove),
@@ -377,7 +384,7 @@ short: Fee table                            # optional: a word or two naming the
 
 tables:                                      # db/schema.rb
   fees:              { new: true, belongs_to: orgs, columns: [name, unit, price_cents:integer] }
-  timesheet_charges: { new: true, belongs_to: [timesheets, fees], columns: [description, quantity] }
+  timesheet_charges: { new: true, part_of: timesheets, belongs_to: fees, columns: [description, quantity] }  # part_of: deleted with its timesheet
   timesheets:        { add: [sent_at:datetime, sent_by_id], remove: [legacy_total] }
   invoices:          { add: [billed_to_id], belongs_to: { billed_to: orgs } }   # a map when the column is not <table>_id
 

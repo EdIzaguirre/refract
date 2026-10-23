@@ -3,6 +3,7 @@ import type {
   ChangeStatus,
   ClassUnit,
   Comparison,
+  Holding,
   LifecycleChange,
   MethodFacts,
   ProductChanges,
@@ -158,12 +159,15 @@ export function overlayPlan(plan: Plan, before: Snapshot): PlanOverlay {
     u.methods = u.methods.filter((x) => !(x.name === name && x.scope === scope));
     u.publicMethods = u.publicMethods.filter((x) => x !== (scope === "class" ? `self.${name}` : name));
   };
-  const depend = (u: ClassUnit, to: string, kind: "association" | "reference" | "call") => {
+  const depend = (u: ClassUnit, to: string, kind: "association" | "reference" | "call", has?: Holding) => {
     const target = findClass(Object.keys(classes), to);
     if (!target || target === u.name) return;
     const d = u.dependsOn.find((x) => x.to === target);
-    if (d) return;
-    u.dependsOn.push({ to: target, kind, count: 1 });
+    if (d) {
+      if (has && !d.has) d.has = has;
+      return;
+    }
+    u.dependsOn.push({ to: target, kind, count: 1, ...(has ? { has } : {}) });
     u.dependsOn.sort((a, b) => a.to.localeCompare(b.to));
     plannedEdges.add(`${u.name}>${target}`);
   };
@@ -205,7 +209,13 @@ export function overlayPlan(plan: Plan, before: Snapshot): PlanOverlay {
       const name = r.column.replace(/_id$/, "");
       const model = modelFor(r.to);
       u.associations.push({ kind: "belongs_to", name, ...(name === singularize(r.to) ? {} : { className: model }) });
-      depend(u, model, "association");
+      depend(u, model, "association", { many: "1", owns: false });
+    }
+    // An owner has many of these and takes them with it.
+    for (const owner of t.partOf) {
+      const o = edit(modelFor(owner), "model");
+      if (!o.associations.some((a) => a.kind === "has_many" && a.name === t.name)) o.associations.push({ kind: "has_many", name: t.name, dependent: "destroy" });
+      depend(o, u.name, "association", { many: "*", owns: true });
     }
   }
 

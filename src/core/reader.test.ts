@@ -89,4 +89,36 @@ describe("RubyReader", () => {
     expect(r.claims("app/views/orders/show.html.erb")).toBe(false);
     expect(r.isTest("spec/models/user_spec.rb")).toBe(true);
   });
+
+  it("reads what a class holds: dependent:, optional:, and objects it makes and keeps (Metz's composition)", async () => {
+    const src = `
+class Bicycle
+  has_many :spokes, dependent: :destroy
+  has_one :bell
+  belongs_to :shop, optional: true
+  has_many :riders, through: :rentals
+
+  def initialize(size:)
+    @parts = Parts.new(size: size)
+    @size = size
+  end
+
+  def lights = @lights ||= Lights::Set.new
+end
+`;
+    const [file] = await new RubyReader().read([{ path: "app/models/bicycle.rb", blob: "b2", source: src }]);
+    const bike = file.classes[0];
+    expect(bike.associations).toEqual([
+      { kind: "has_many", name: "spokes", dependent: "destroy" },
+      { kind: "has_one", name: "bell" },
+      { kind: "belongs_to", name: "shop", optional: true },
+      { kind: "has_many", name: "riders", through: "rentals" },
+    ]);
+    // Made and kept: composition. A value passed in (@size) is not.
+    expect(bike.composes).toEqual([
+      { ivar: "parts", className: "Parts" },
+      { ivar: "lights", className: "Lights::Set" },
+    ]);
+  });
 });
+

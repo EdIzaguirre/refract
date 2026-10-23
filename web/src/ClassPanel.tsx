@@ -5,6 +5,7 @@ import { boxDims } from "./map/layout";
 import { Mermaid } from "./Mermaid";
 import { CodeDiff } from "./CodeDiff";
 import { LENS_INFO } from "./LensRail";
+import { holdingWords } from "./holding";
 
 export type PanelTab = "shape" | "flow" | "code";
 
@@ -148,8 +149,8 @@ function ShapeTab({ c, comparison, lenses, onGo }: { c: ClassChange; comparison:
       )}
       <MethodsTable methods={c.methods} unit={c.after ?? c.before} />
       <div className="pair">
-        <DepList title="Depends on" edges={out.map((e) => ({ name: e.to, status: e.status, kind: e.kind }))} onGo={onGo} />
-        <DepList title="Used by" edges={inbound.map((e) => ({ name: e.from, status: e.status, kind: e.kind }))} onGo={onGo} />
+        <DepList title="Depends on" edges={out.map((e) => ({ name: e.to, status: e.status, kind: holdingWords(e.has, e.kind) ?? e.kind, owns: e.has?.owns }))} onGo={onGo} />
+        <DepList title="Used by" edges={inbound.map((e) => ({ name: e.from, status: e.status, kind: e.has?.owns ? "owns this" : e.kind, owns: e.has?.owns }))} onGo={onGo} />
       </div>
     </>
   );
@@ -210,7 +211,7 @@ function MethodsTable({ methods, unit }: { methods: MethodChange[]; unit: ClassC
   );
 }
 
-function DepList({ title, edges, onGo }: { title: string; edges: { name: string; status: string; kind: string }[]; onGo(n: string): void }) {
+function DepList({ title, edges, onGo }: { title: string; edges: { name: string; status: string; kind: string; owns?: boolean }[]; onGo(n: string): void }) {
   const order = { added: 0, removed: 1, unchanged: 2 } as Record<string, number>;
   const list = [...edges].sort((a, b) => order[a.status] - order[b.status] || a.name.localeCompare(b.name));
   return (
@@ -222,7 +223,11 @@ function DepList({ title, edges, onGo }: { title: string; edges: { name: string;
         {list.slice(0, 40).map((e) => (
           <div key={e.name}>
             <span className={e.status === "added" ? "plus" : e.status === "removed" ? "minus" : ""}>{e.status === "added" ? "+ " : e.status === "removed" ? "− " : "  "}</span>
-            <button onClick={() => onGo(e.name)}>{e.name}</button> <span className="vis">{e.kind}</span>
+            <button onClick={() => onGo(e.name)}>{e.name}</button>{" "}
+            <span className="vis" title={e.owns ? "Composition: these go when the owner goes" : undefined}>
+              {e.owns ? "◆ " : ""}
+              {e.kind}
+            </span>
           </div>
         ))}
         {list.length > 40 && <span className="vis">and {list.length - 40} more</span>}

@@ -35,6 +35,7 @@ A plan is one small YAML file saying what a change intends to do, in the terms R
    - `classes` only for new or reshaped classes, each with its public methods as signatures (`add_fee(fee, qty, by)`) and what it depends on. Leave private helpers out.
    - `flows` only for the one to three requests that matter, as call trees from the controller action down.
    - Existing tables, classes and states must be spelled exactly as `refract plan context` shows them. New names follow Rails conventions.
+   - When a new table's rows belong to one owner and should go with it (`has_many ..., dependent: :destroy`), write `part_of: <owner table>` instead of `belongs_to`. Refract draws it as composition, the black diamond, so plans that put the same rows under different owners show it at a glance.
    - Every section is optional. A copy tweak needs no plan; a medium change might be only tables and lifecycles. Small beats complete.
    - Where we have not decided something, leave it out and list it as an open question in your reply, rather than guessing in the file.
 4. Write it to the path `refract plan path <name>` prints (create the folder if needed). It lives outside the repository, like Refract's areas.yml.

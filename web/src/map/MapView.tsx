@@ -4,6 +4,7 @@ import { zoom as d3zoom, zoomIdentity, type ZoomBehavior, type ZoomTransform } f
 import "d3-transition";
 import type { ClassChange, MethodChange } from "../../../src/shared/types";
 import type { AreaNode, ClassNode, Dims, MapLayout, Rect } from "./layout";
+import { DiamondMarker, Multiplicity } from "../holding";
 
 export interface MapHandle {
   flyTo(rect: Rect, maxScale?: number, rightInset?: number): void;
@@ -227,6 +228,9 @@ function Canvas({ index, register, onZoom, k, phase, tag, layout, selected, onSe
               <path d="M0 1L10 5L0 9z" className={`mk-${c}`} />
             </marker>
           ))}
+          {(["accent", "muted", "bad", "ink"] as const).map((c) => (
+            <DiamondMarker key={`own-${c}`} id={`own-${c}${index}`} className={`mk-${c}`} />
+          ))}
         </defs>
         <rect width="100%" height="100%" fill={`url(#dots${index})`} pointerEvents="none" />
         <g ref={gRef}>
@@ -382,14 +386,22 @@ function Edges({ layout, p, open, selected, index }: { layout: MapLayout; p: num
         if (alpha < 0.02) return null;
         const hl = touchesSelected;
         const marker = hl ? "ink" : status === "added" ? "accent" : status === "removed" ? "bad" : "muted";
+        const opacity = o * alpha * (selected && !hl ? 0.25 : status === "unchanged" ? 0.7 : 1);
         return (
-          <path
-            key={e.key}
-            d={e.path}
-            className={`edge ${status} ${e.edge.kind === "inherits" ? "inherits" : ""} ${e.edge.planned ? "planned" : ""} ${hl ? "hl" : ""}`}
-            opacity={o * alpha * (selected && !hl ? 0.25 : status === "unchanged" ? 0.7 : 1)}
-            markerEnd={`url(#arrow-${marker}${index})`}
-          />
+          <g key={e.key}>
+            <path
+              d={e.path}
+              className={`edge ${status} ${e.edge.kind === "inherits" ? "inherits" : ""} ${e.edge.planned ? "planned" : ""} ${hl ? "hl" : ""}`}
+              opacity={opacity}
+              markerEnd={`url(#arrow-${marker}${index})`}
+              markerStart={e.edge.has?.owns ? `url(#own-${marker}${index})` : undefined}
+            />
+            {opacity > 0.5 && (
+              <g opacity={opacity}>
+                <Multiplicity at={e.tail} has={e.edge.has} className={`map-many ${marker}`} />
+              </g>
+            )}
+          </g>
         );
       })}
     </g>
