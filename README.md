@@ -54,7 +54,7 @@ refract plan check feature-x  # the plan against what the branch built
 refract --plan x-a --vs x-b,x-c   # two to four plans for one goal, side by side (design it twice)
 ```
 
-`refract` and `refract watch` start a local server on <http://127.0.0.1:4100> (or the next free port) and open your browser. `--port`, `--no-open` and `--quiet <seconds>` (how long a watched branch must be quiet before the lenses run on their own; default 180) are available.
+`refract` and `refract watch` start a local server on <http://127.0.0.1:4100> (or the next free port) and open your browser. Refract is one tab: once it is running, every later `refract` (a plan, plans side by side, another branch, even another repository) opens in that same tab and returns at once, instead of starting another server. Click **Refract** in the header to see everything open, move between them, or close one. When a branch has a plan, **Design | Code** in the header flips between the design drawn against today's code and the branch as built, checked against it. `refract stop` stops it. A newly built Refract takes over from an older one still running and reopens its views. `--port`, `--no-open` and `--quiet <seconds>` (how long a watched branch must be quiet before the lenses run on their own; default 180) are available.
 
 Inside Claude Code, `/refract main..agent/feature-x` starts the map in the background and keeps the measurements in the conversation, so you can ask follow-up questions there.
 

@@ -11,6 +11,7 @@ Usage
   refract lenses [range]     ask the Metz, Ousterhout and Copeland lenses about the change
   refract trace [range]      trace request flows by running the tests that touch the change
   refract install-command    add the /refract command to Claude Code
+  refract stop               stop the running Refract
   refract --plan <name>      draw a plan against today's code, before the branch exists
   refract --plan a --vs b    two to four plans for one goal side by side (--vs b,c,d), to design it twice
   refract plan check [name]  the plan against what the branch built (plan path, format, context too)
@@ -28,6 +29,10 @@ Options
   --plan <name> with a range, check the branch against this plan instead of its own
   --vs <names>  with --plan, up to three more plans to lay beside it, comma-separated or repeated
   --base <ref>  with --plan, draw against this branch (a shared core branch, say) instead of the default branch
+
+Refract is one browser tab. The first refract starts it; later ones (a plan, plans
+side by side, another branch or repository) open in that same tab and return at once.
+The header lists what is open, so you can move between them or close one.
 
 Plans live at ~/.refract/<repo>/plans/<branch>.yml. A branch with a plan opens on
 its Plan check; /refract plan in Claude Code drafts one from the conversation.
@@ -56,7 +61,7 @@ function parse(argv: string[]): Args {
     } else if (a === "-h") flags.help = true;
     else positional.push(a);
   }
-  const commands = ["watch", "diff", "areas", "lenses", "trace", "plan", "install-command", "serve", "help"];
+  const commands = ["watch", "diff", "areas", "lenses", "trace", "plan", "install-command", "serve", "stop", "help"];
   const command = positional[0] && commands.includes(positional[0]) ? positional.shift()! : "serve";
   return { command, positional, flags, vs };
 }
@@ -70,6 +75,12 @@ async function main() {
   if (args.command === "install-command") {
     const { installCommand } = await import("./install.js");
     await installCommand();
+    return;
+  }
+  const port = Number(args.flags.port ?? process.env.REFRACT_PORT ?? 4100);
+  if (args.command === "stop") {
+    const { stopRunning } = await import("../server/server.js");
+    process.stdout.write((await stopRunning(port)) ? "Stopped Refract.\n" : "Refract is not running.\n");
     return;
   }
   const ws = await Workspace.open(String(args.flags.repo ?? process.cwd()));
@@ -114,11 +125,11 @@ async function main() {
     }
     case "watch":
     case "serve": {
-      const { startServer } = await import("../server/server.js");
-      await startServer(ws, {
+      const { launch } = await import("../server/server.js");
+      await launch(ws, {
         spec,
         watch: args.command === "watch" ? (spec ?? null) : undefined,
-        port: Number(args.flags.port ?? process.env.REFRACT_PORT ?? 4100),
+        port,
         open: !args.flags["no-open"],
         quietSeconds: Number(args.flags.quiet ?? 180),
         plan: typeof args.flags.plan === "string" ? args.flags.plan : undefined,

@@ -406,8 +406,24 @@ export interface Timeline {
 }
 
 export interface ServerEvent {
-  type: "comparison" | "timeline" | "lenses" | "status" | "flows" | "story" | "plans";
+  type: "comparison" | "timeline" | "lenses" | "status" | "flows" | "story" | "plans" | "views" | "open";
   payload: unknown;
+  /** The view a view's event belongs to; events about the open views themselves have none. */
+  view?: string;
+}
+
+/** One thing open in the running Refract: a branch, a plan, or plans side by side. */
+export interface ViewInfo {
+  id: string;
+  /** The repository, as Refract names it (owner-repo). */
+  repo: string;
+  kind: "branch" | "plan" | "plans";
+  /** The branch, the plan's name, or the plans' names. */
+  title: string;
+  /** A branch Refract is following for new commits. */
+  live: boolean;
+  /** The other side of the same work, when there is one: a branch's design, or the code a design became. */
+  twin?: "design" | "code";
 }
 
 // ---------- product ----------

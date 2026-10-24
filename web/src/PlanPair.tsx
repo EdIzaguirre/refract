@@ -2,7 +2,7 @@ import type React from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { PlanComparison, PlanSide, ProductRow, TableChange } from "../../src/shared/types";
 import { type SurfaceItem, byLayer, methodCount, sharedSurface, surfaceClasses } from "../../src/shared/plan-surface";
-import { Logo } from "./VerdictStrip";
+import { ViewSwitch } from "./Views";
 import { TablesDiagram } from "./tour/Product";
 import { ROLE_WORD, StopDiagram } from "./tour/StopDiagram";
 import { drawTogether } from "../../src/shared/plan-dependencies";
@@ -45,10 +45,7 @@ export function PlanPair({ pair }: { pair: PlanComparison }) {
     <div className="app">
       <header className="strip">
         <div className="strip-top">
-          <div className="brand">
-            <Logo />
-            Refract
-          </div>
+          <ViewSwitch />
           <div className="refs">
             <span>{pair.sides[0].drawing.repo.name}</span>
             <span className="range-line">
